@@ -5,13 +5,17 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize, edited]
 
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
 jobs:
   check-source-branch:
     name: Check PR source is rc/*
     runs-on: ubuntu-latest
     steps:
       - name: Verify source branch starts with rc/
-        id: check
         run: |
           SOURCE="${{ github.head_ref }}"
           echo "Source branch: $SOURCE"
@@ -19,12 +23,10 @@ jobs:
           if [[ "$SOURCE" != rc/* ]]; then
             echo "❌ ERROR: Pull Requests into main are ONLY allowed from rc/* branches."
             echo "   This PR is from: $SOURCE"
-            echo "invalid=true" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           echo "✅ Source branch is valid: $SOURCE"
-          echo "invalid=false" >> $GITHUB_OUTPUT
 
       - name: Close invalid Pull Request
         if: failure()
@@ -34,7 +36,6 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const sourceBranch = context.payload.pull_request.head.ref;
 
-            // Add a comment explaining why it was closed
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -45,7 +46,6 @@ jobs:
                     `Please create an \`rc/*\` branch, merge your feature work into it, and then open a new PR.`
             });
 
-            // Close the Pull Request
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -53,4 +53,4 @@ jobs:
               state: 'closed'
             });
 
-            console.log(`Closed PR #${prNumber} because source branch is not rc/*`);
+            console.log(`Closed PR #${prNumber}`);
