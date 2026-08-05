@@ -26,7 +26,7 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Source branch is valid test: $SOURCE"
+          echo "✅ Source branch is valid: $SOURCE"
 
       - name: Close invalid Pull Request
         if: failure()
@@ -52,5 +52,3 @@ jobs:
               pull_number: prNumber,
               state: 'closed'
             });
-
-            console.log(`Closed PR #${prNumber}`);
