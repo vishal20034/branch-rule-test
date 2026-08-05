@@ -2,6 +2,7 @@ name: PR Source Branch Check
 
 on:
   pull_request:
+    types: [opened]
     branches: [main]
 
 jobs:
@@ -15,3 +16,30 @@ jobs:
             exit 1
           fi
           echo "✅ Source branch is valid: ${{ github.head_ref }}"
+            echo "❌ PRs into main are only allowed from rc/* branches."
+            exit 1
+          fi
+          echo "✅ Source branch is valid: ${{ github.head_ref }}"
+
+  auto-close-invalid-pr:
+    if: ${{ !startsWith(github.head_ref, 'rc/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Close and comment on invalid PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "🚫 PRs into `main` are only allowed from `rc/*` branches. This PR is being closed automatically."
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: "closed"
+            });
