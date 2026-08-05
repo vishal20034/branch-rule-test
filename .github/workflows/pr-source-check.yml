@@ -1,0 +1,17 @@
+name: PR Source Branch Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR is from an rc branch
+        run: |
+          if [[ "${{ github.head_ref }}" != rc/* ]]; then
+            echo "❌ PRs into main are only allowed from rc/* branches. This PR is from: ${{ github.head_ref }}"
+            exit 1
+          fi
+          echo "✅ Source branch is valid: ${{ github.head_ref }}"
