@@ -1,25 +1,25 @@
-
 name: PR Source Branch Check
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
-    branches: [main]
+    branches: [main]          # only runs on PRs targeting main
+    types: [opened, reopened, synchronize, edited]
 
 jobs:
   check-source-branch:
+    name: Check PR source is rc/*
     runs-on: ubuntu-latest
     steps:
-      - name: Verify PR source branch
+      - name: Verify source branch starts with rc/
         run: |
-          echo "Source branch: ${{ github.head_ref }}"
-          if [[ "${{ github.head_ref }}" != rc/* ]]; then
-            echo "❌ PRs into main are only allowed from rc/* branches. This PR is from: ${{ github.head_ref }}"
+          SOURCE="${{ github.head_ref }}"
+          echo "Source branch: $SOURCE"
+
+          if [[ "$SOURCE" != rc/* ]]; then
+            echo "❌ ERROR: Pull Requests into main are ONLY allowed from rc/* branches."
+            echo "   This PR is from: $SOURCE"
+            echo "   Please create an rc/* branch, merge your feat work into it, then open the PR from the rc branch."
             exit 1
           fi
-          echo "✅ Source branch is valid: ${{ github.head_ref }}"
-            echo "❌ PRs into main are only allowed from rc/* branches."
-            echo "This PR is from: ${{ github.head_ref }}"
-            exit 1
-          fi
-          echo "✅ Source branch is valid."
+
+          echo "✅ Source branch is valid: $SOURCE"
