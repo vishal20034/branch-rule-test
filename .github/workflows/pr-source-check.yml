@@ -2,7 +2,7 @@ name: PR Source Branch Check
 
 on:
   pull_request:
-    branches: [main]          # only runs on PRs targeting main
+    branches: [main]
     types: [opened, reopened, synchronize, edited]
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify source branch starts with rc/
+        id: check
         run: |
           SOURCE="${{ github.head_ref }}"
           echo "Source branch: $SOURCE"
@@ -18,8 +19,38 @@ jobs:
           if [[ "$SOURCE" != rc/* ]]; then
             echo "❌ ERROR: Pull Requests into main are ONLY allowed from rc/* branches."
             echo "   This PR is from: $SOURCE"
-            echo "   Please create an rc/* branch, merge your feat work into it, then open the PR from the rc branch."
+            echo "invalid=true" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           echo "✅ Source branch is valid: $SOURCE"
+          echo "invalid=false" >> $GITHUB_OUTPUT
+
+      - name: Close invalid Pull Request
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sourceBranch = context.payload.pull_request.head.ref;
+
+            // Add a comment explaining why it was closed
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `❌ **This Pull Request has been automatically closed.**\n\n` +
+                    `Only branches starting with \`rc/\` are allowed to create PRs into \`main\`.\n` +
+                    `Your branch \`${sourceBranch}\` is not allowed.\n\n` +
+                    `Please create an \`rc/*\` branch, merge your feature work into it, and then open a new PR.`
+            });
+
+            // Close the Pull Request
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              state: 'closed'
+            });
+
+            console.log(`Closed PR #${prNumber} because source branch is not rc/*`);
