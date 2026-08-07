@@ -20,7 +20,7 @@ jobs:
           SOURCE="${{ github.head_ref }}"
           echo "Source branch: $SOURCE"
 
-          if [[ "$SOURCE" != rc/* ]]; then
+          if [[ "$SOURCE" != rc-* ]]; then
             echo "❌ ERROR: Pull Requests into main are ONLY allowed from rc/* branches."
             echo "   This PR is from: $SOURCE"
             exit 1
