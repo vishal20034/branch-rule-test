@@ -1,4 +1,4 @@
-name: Auto-close invalid PR
+name: Auto-close invalid PR's
 
 on:
   pull_request:
