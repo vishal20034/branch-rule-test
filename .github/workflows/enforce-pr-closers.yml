@@ -1,14 +1,11 @@
 name: Enforce PR-closer policy
-
 on:
   pull_request_target:
     types: [closed]
-
 permissions:
   pull-requests: write
   issues: write
   contents: read
-
 jobs:
   enforce-closer:
     runs-on: ubuntu-latest
@@ -18,7 +15,6 @@ jobs:
         run: |
           echo "PR was merged; no enforcement required."
           exit 0
-
       - name: Enforce allowed closers
         uses: actions/github-script@v7
         with:
@@ -34,6 +30,13 @@ jobs:
               return;
             }
 
+            // Allow if closed by our own repository automation
+            // (e.g. auto-close-invalid-pr.yml closing an invalid feat/* -> main PR)
+            if (actor === 'github-actions[bot]') {
+              core.info(`Allowed: closed by repository automation (github-actions[bot]).`);
+              return;
+            }
+
             // Gather requested reviewers (users)
             const requested = (pr.requested_reviewers || []).map(r => r.login);
 
@@ -44,9 +47,7 @@ jobs:
               pull_number: prNumber,
             });
             const reviewersFromHistory = (reviewsResp.data || []).map(r => r.user && r.user.login).filter(Boolean);
-
             const allowedSet = new Set([...requested, ...reviewersFromHistory]);
-
             if (allowedSet.has(actor)) {
               core.info(`Allowed: actor (${actor}) is a reviewer/requested reviewer.`);
               return;
@@ -69,6 +70,8 @@ jobs:
             }
 
             // Not allowed -> reopen and comment
+            core.info(`Not allowed: actor (${actor}) is not author, reviewer, admin, or automation. Reopening PR.`);
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
