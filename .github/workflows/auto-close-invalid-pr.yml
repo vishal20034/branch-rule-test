@@ -1,0 +1,38 @@
+name: Auto-close invalid PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check-and-close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch and close if invalid
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headRef = context.payload.pull_request.head.ref;
+            const prNumber = context.payload.pull_request.number;
+
+            if (!headRef.startsWith('rc/')) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `❌ This PR is automatically closed. Pull requests into \`main\` are only allowed from \`rc/*\` branches. This PR was opened from \`${headRef}\`.`
+              });
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                state: 'closed'
+              });
+            }
