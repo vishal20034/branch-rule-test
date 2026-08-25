@@ -1,6 +1,5 @@
 # Dev CI/CD — GitHub Actions only
-# No Azure. No SonarQube. No release note.
-# Real email via SMTP secrets (Gmail / Outlook). Not Graph yet.
+# Real email via Gmail SMTP (App Password). No Azure.
 
 name: Dev CI/CD
 
@@ -18,27 +17,16 @@ jobs:
     name: Email 1 - CI/CD Started
     runs-on: ubuntu-latest
     steps:
-      - name: Require mail secrets
+      - uses: actions/checkout@v4
+      - name: Send CI/CD Started email
         env:
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: |
-          if [ -z "$MAIL_TO" ]; then
-            echo "::error::Mail secrets are missing. Add MAIL_TO, MAIL_FROM, MAIL_USERNAME, MAIL_PASSWORD (and optional MAIL_HOST, MAIL_PORT) in Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-
-      - name: Send CI/CD Started email
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
-          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          secure: false
-          subject: "[DEV] CI/CD Started — ${{ github.repository }}"
-          to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM }}
-          body: |
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_SUBJECT: "[DEV] CI/CD Started — ${{ github.repository }}"
+          MAIL_BODY: |
             Dev CI/CD started.
 
             Repo:   ${{ github.repository }}
@@ -46,15 +34,14 @@ jobs:
             Commit: ${{ github.sha }}
             Actor:  ${{ github.actor }}
             Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/scripts/send_dev_mail.py
 
   test:
     name: Run automated tests
     needs: notify-start
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Run basic checks
         run: |
           echo "Running Dev automated tests..."
@@ -67,32 +54,25 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Create Function App package
         run: |
           mkdir -p packages/function
           cp README.md packages/function/
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/function/build-info.txt
           echo "commit=${{ github.sha }}" >> packages/function/build-info.txt
-
       - name: Create App Service package
         run: |
           mkdir -p packages/appservice
           cp README.md packages/appservice/
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/appservice/build-info.txt
           echo "commit=${{ github.sha }}" >> packages/appservice/build-info.txt
-
-      - name: Upload Function package
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: function-package
           path: packages/function/
           retention-days: 14
-
-      - name: Upload App Service package
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: appservice-package
           path: packages/appservice/
@@ -104,53 +84,45 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     steps:
-      - name: Download Function package
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: function-package
           path: packages/function/
-
-      - name: Download App Service package
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: appservice-package
           path: packages/appservice/
-
       - name: Simulate Deploy to Dev Function App
         run: |
           echo ">>> Dev Function App deploy (simulated — no Azure)"
           ls -la packages/function/
           cat packages/function/build-info.txt
-          echo ">>> Function App path OK"
-
       - name: Simulate Deploy to Dev App Service
         run: |
           echo ">>> Dev App Service deploy (simulated — no Azure)"
           ls -la packages/appservice/
           cat packages/appservice/build-info.txt
-          echo ">>> App Service path OK"
 
   notify-success:
     name: Email 3 - CI/CD Succeeded
     needs: deploy
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Send CI/CD Succeeded email
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
-          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          secure: false
-          subject: "[DEV] CI/CD SUCCEEDED — Dev deploy completed"
-          to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM }}
-          body: |
+        env:
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_SUBJECT: "[DEV] CI/CD SUCCEEDED — Dev deploy completed"
+          MAIL_BODY: |
             Dev deploy completed.
 
             Function App + App Service path finished (simulated until Azure is connected).
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/scripts/send_dev_mail.py
 
   notify-failure:
     name: Email 2 - CI/CD Failed
@@ -158,18 +130,17 @@ jobs:
     needs: [notify-start, test, build, deploy]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Send CI/CD Failed email
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
-          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          secure: false
-          subject: "[DEV] CI/CD FAILED"
-          to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM }}
-          body: |
+        env:
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_SUBJECT: "[DEV] CI/CD FAILED"
+          MAIL_BODY: |
             Dev CI/CD failed.
 
             Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 .github/scripts/send_dev_mail.py
