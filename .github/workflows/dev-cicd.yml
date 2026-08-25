@@ -1,31 +1,60 @@
-# Dev CI/CD — GitHub Actions only
-# Real email via Gmail SMTP (App Password). No Azure.
+# =============================================================================
+# FILE: .github/workflows/dev-cicd.yml
+# WHAT: Dev environment CI/CD only. GitHub Actions. Not Production.
+# NOT IN THIS FILE: Azure real deploy, SonarQube, release notes, tags.
+# WHEN IT RUNS: merge a PR into branch "dev", or click Actions → Run workflow.
+# =============================================================================
 
+# Name shown in the GitHub Actions tab (the title of the pipeline).
 name: Dev CI/CD
 
+# "on" = events that start this pipeline.
 on:
+  # Start automatically when someone pushes commits.
   push:
+    # Only if the push is to the branch named exactly "dev"
+    # (this includes merging a Pull Request into dev).
     branches:
       - dev
+  # Extra start button: Actions → Dev CI/CD → "Run workflow" (no merge needed).
   workflow_dispatch:
 
+# What this pipeline is allowed to do on GitHub.
 permissions:
+  # It may read the repository files. It cannot change settings or delete the repo.
   contents: read
 
+# "jobs" = the boxes on the left of the Actions screen.
+# They run in order because of "needs:".
 jobs:
+
+  # ---------------------------------------------------------------------------
+  # JOB 1 — Email 1: tell the team CI/CD has started
+  # ---------------------------------------------------------------------------
   notify-start:
+    # Label you see on the Actions screen.
     name: Email 1 - CI/CD Started
+    # Use a free Ubuntu computer provided by GitHub.
     runs-on: ubuntu-latest
     steps:
+      # Download this commit so we can run the mail script from the repo.
       - uses: actions/checkout@v4
+      # Send the "Started" email using secrets + Python.
       - name: Send CI/CD Started email
         env:
+          # Inbox that receives the mail (GitHub secret MAIL_TO).
           MAIL_TO: ${{ secrets.MAIL_TO }}
+          # From address (GitHub secret MAIL_FROM).
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          # Gmail login user, full address e.g. bnag7309@gmail.com.
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          # Gmail App Password (16 letters), NOT the normal Gmail password.
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          # Optional. Empty = smtp.gmail.com.
           MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          # Subject line of this email.
           MAIL_SUBJECT: "[DEV] CI/CD Started — ${{ github.repository }}"
+          # Body text. ${{ github.* }} is filled by GitHub at run time.
           MAIL_BODY: |
             Dev CI/CD started.
 
@@ -34,77 +63,124 @@ jobs:
             Commit: ${{ github.sha }}
             Actor:  ${{ github.actor }}
             Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # Run the mail helper script (same script for Email 1, 2 and 3).
         run: python3 .github/scripts/send_dev_mail.py
 
+  # ---------------------------------------------------------------------------
+  # JOB 2 — Automated tests (must pass before we build)
+  # ---------------------------------------------------------------------------
   test:
     name: Run automated tests
+    # Wait until Email 1 succeeded. If Email 1 is red, this job is skipped.
     needs: notify-start
     runs-on: ubuntu-latest
     steps:
+      # Fresh machine: download the repo again.
       - uses: actions/checkout@v4
       - name: Run basic checks
         run: |
           echo "Running Dev automated tests..."
+          # Fail if README.md is missing (-f = this path is a file).
           test -f README.md
+          # Fail if .github folder is missing (-d = this path is a directory).
           test -d .github
           echo "All basic checks passed."
 
+  # ---------------------------------------------------------------------------
+  # JOB 3 — Build package ONCE (Function App package + App Service package)
+  # ---------------------------------------------------------------------------
   build:
     name: Build package once
+    # Do not build if tests failed.
     needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Pretend Function App build output (this test repo has no real app build).
       - name: Create Function App package
         run: |
+          # Create the output folder.
           mkdir -p packages/function
+          # Copy a file into it so the folder is not empty.
           cp README.md packages/function/
+          # Write UTC time into build-info.txt (> = create/overwrite file).
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/function/build-info.txt
+          # Append the git commit (>> = add to the end of the file).
           echo "commit=${{ github.sha }}" >> packages/function/build-info.txt
+
+      # Pretend App Service / Web App build output.
       - name: Create App Service package
         run: |
           mkdir -p packages/appservice
           cp README.md packages/appservice/
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/appservice/build-info.txt
           echo "commit=${{ github.sha }}" >> packages/appservice/build-info.txt
+
+      # Save Function package so the deploy job can download it later.
+      # (When a job ends, its Ubuntu machine is deleted.)
       - uses: actions/upload-artifact@v4
         with:
+          # Name you see under Artifacts on the run page.
           name: function-package
+          # Folder to save.
           path: packages/function/
+          # Delete this artifact after 14 days.
           retention-days: 14
+
+      # Save App Service package the same way.
       - uses: actions/upload-artifact@v4
         with:
           name: appservice-package
           path: packages/appservice/
           retention-days: 14
 
+  # ---------------------------------------------------------------------------
+  # JOB 4 — Deploy to Dev (simulated until Azure access exists)
+  # ---------------------------------------------------------------------------
   deploy:
     name: Deploy to Dev Environment
+    # Deploy only after both packages exist.
     needs: build
     runs-on: ubuntu-latest
+    # GitHub Environment named "dev" (Settings → Environments).
+    # No approvers on Dev. Production will use a different environment later.
     environment: dev
     steps:
+      # Download the SAME Function package from the build job. Do not rebuild.
       - uses: actions/download-artifact@v4
         with:
           name: function-package
           path: packages/function/
+
+      # Download the SAME App Service package.
       - uses: actions/download-artifact@v4
         with:
           name: appservice-package
           path: packages/appservice/
+
+      # Not a real Azure Function App deploy yet (no Azure account on this repo).
       - name: Simulate Deploy to Dev Function App
         run: |
           echo ">>> Dev Function App deploy (simulated — no Azure)"
+          # List files to prove the package arrived.
           ls -la packages/function/
+          # Show time + commit from the build.
           cat packages/function/build-info.txt
+
+      # Not a real Azure App Service deploy yet.
       - name: Simulate Deploy to Dev App Service
         run: |
           echo ">>> Dev App Service deploy (simulated — no Azure)"
           ls -la packages/appservice/
           cat packages/appservice/build-info.txt
 
+  # ---------------------------------------------------------------------------
+  # JOB 5 — Email 3: success (only if deploy succeeded)
+  # ---------------------------------------------------------------------------
   notify-success:
     name: Email 3 - CI/CD Succeeded
+    # If deploy is red, this job is skipped.
     needs: deploy
     runs-on: ubuntu-latest
     steps:
@@ -124,9 +200,14 @@ jobs:
             Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 .github/scripts/send_dev_mail.py
 
+  # ---------------------------------------------------------------------------
+  # JOB 6 — Email 2: failure (only if something above failed)
+  # ---------------------------------------------------------------------------
   notify-failure:
     name: Email 2 - CI/CD Failed
+    # Run this job only when a needed job failed. On a green run this is skipped.
     if: failure()
+    # Watch these jobs so we can send mail whichever one failed.
     needs: [notify-start, test, build, deploy]
     runs-on: ubuntu-latest
     steps:
