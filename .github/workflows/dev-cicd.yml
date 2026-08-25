@@ -1,6 +1,6 @@
 # Dev CI/CD — GitHub Actions only
 # No Azure. No SonarQube. No release note.
-# Trigger: merge into branch "dev" (or manual Run workflow).
+# Real email via SMTP secrets (Gmail / Outlook). Not Graph yet.
 
 name: Dev CI/CD
 
@@ -18,16 +18,34 @@ jobs:
     name: Email 1 - CI/CD Started
     runs-on: ubuntu-latest
     steps:
-      - name: Print CI/CD Started
+      - name: Require mail secrets
+        env:
+          MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
-          echo "=============================================="
-          echo "[DEV] CI/CD Started"
-          echo "Repo:   ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Actor:  ${{ github.actor }}"
-          echo "Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "=============================================="
+          if [ -z "$MAIL_TO" ]; then
+            echo "::error::Mail secrets are missing. Add MAIL_TO, MAIL_FROM, MAIL_USERNAME, MAIL_PASSWORD (and optional MAIL_HOST, MAIL_PORT) in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Send CI/CD Started email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
+          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          secure: false
+          subject: "[DEV] CI/CD Started — ${{ github.repository }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          body: |
+            Dev CI/CD started.
+
+            Repo:   ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor:  ${{ github.actor }}
+            Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   test:
     name: Run automated tests
@@ -117,13 +135,22 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Print CI/CD Succeeded
-        run: |
-          echo "=============================================="
-          echo "[DEV] CI/CD SUCCEEDED — Dev deploy completed"
-          echo "Function App + App Service path finished (simulated)."
-          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "=============================================="
+      - name: Send CI/CD Succeeded email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
+          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          secure: false
+          subject: "[DEV] CI/CD SUCCEEDED — Dev deploy completed"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          body: |
+            Dev deploy completed.
+
+            Function App + App Service path finished (simulated until Azure is connected).
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   notify-failure:
     name: Email 2 - CI/CD Failed
@@ -131,9 +158,18 @@ jobs:
     needs: [notify-start, test, build, deploy]
     runs-on: ubuntu-latest
     steps:
-      - name: Print CI/CD Failed
-        run: |
-          echo "=============================================="
-          echo "[DEV] CI/CD FAILED"
-          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "=============================================="
+      - name: Send CI/CD Failed email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_HOST != '' && secrets.MAIL_HOST || 'smtp.gmail.com' }}
+          server_port: ${{ secrets.MAIL_PORT != '' && secrets.MAIL_PORT || '587' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          secure: false
+          subject: "[DEV] CI/CD FAILED"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          body: |
+            Dev CI/CD failed.
+
+            Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
