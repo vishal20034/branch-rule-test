@@ -1,0 +1,137 @@
+# =============================================================================
+# FINAL Dev CI/CD — intended pipeline (for review)
+# Repo to run this on later: a Node app with package.json + Azure Dev resources.
+# This file is for CHECKING. It is not the live workflow on branch-rule-test
+# (that test repo has no npm and no Azure, so this YAML must not run there).
+# =============================================================================
+
+# Title in GitHub → Actions.
+name: Dev CI/CD
+
+# When the pipeline starts.
+on:
+  # Automatic start.
+  push:
+    # Only if the push/merge is to branch "dev".
+    branches: [ dev ]
+  # Extra button: Actions → Dev CI/CD → Run workflow (no merge needed).
+  workflow_dispatch:
+
+# The boxes on the left of the Actions screen.
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # JOB 1 — Email 1: CI/CD has started
+  # ---------------------------------------------------------------------------
+  notify-start:
+    # Free Ubuntu machine from GitHub.
+    runs-on: ubuntu-latest
+    steps:
+      # Label on the Actions screen.
+      - name: Email 1 - CI/CD Started
+        # Placeholder: prints in the log only. Not real mail yet.
+        run: echo "Send Graph API mail: [DEV] CI/CD Started"
+        # Replace the echo with Microsoft Graph sendMail (after Azure AD app exists).
+        # Mail subject to send: [DEV] CI/CD Started
+
+  # ---------------------------------------------------------------------------
+  # JOB 2 — Automated tests (must pass before we build)
+  # ---------------------------------------------------------------------------
+  test:
+    # Wait until Email 1 succeeded. If Email 1 is red, skip this job.
+    needs: notify-start
+    runs-on: ubuntu-latest
+    steps:
+      # Download this git commit onto the machine.
+      - uses: actions/checkout@v4
+      # Install Node.js.
+      - uses: actions/setup-node@v4
+        # Use Node version 20.
+        with: { node-version: '20' }
+      # Install packages from package-lock.json (clean, repeatable install).
+      - run: npm ci
+      # Run tests. If any test fails, this job turns red and deploy does not run.
+      - run: npm test
+
+  # ---------------------------------------------------------------------------
+  # JOB 3 — Build the package ONCE (do not rebuild at deploy time)
+  # ---------------------------------------------------------------------------
+  build:
+    # Do not build if tests failed.
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      # Fresh machine → download code again.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      # Install deps, then create production files (usually folder dist/).
+      - run: npm ci && npm run build
+      # Save dist/ so the deploy job can download it (this machine is deleted after the job).
+      - uses: actions/upload-artifact@v4
+        with:
+          # Name you see under Artifacts on the run page.
+          name: dev-package
+          # Folder produced by npm run build.
+          path: dist/
+
+  # ---------------------------------------------------------------------------
+  # JOB 4 — Deploy the SAME package to Azure Dev Function App
+  # ---------------------------------------------------------------------------
+  deploy:
+    # Deploy only after the package exists.
+    needs: build
+    runs-on: ubuntu-latest
+    # GitHub Environment named "dev" (Settings → Environments). No approvers on Dev.
+    environment: dev
+    steps:
+      # Get the same artifact from the build job. Do not rebuild.
+      - uses: actions/download-artifact@v4
+        with: { name: dev-package, path: dist/ }
+      # Log in to Azure using the Dev service principal JSON (GitHub secret).
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_DEV }}
+      # Official action: publish dist/ to the Dev Function App.
+      - name: Deploy to Azure Dev Function App
+        uses: Azure/functions-action@v1
+        with:
+          # Dev Function App name (GitHub secret — not written in this file).
+          app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME_DEV }}
+          # Path we just downloaded.
+          package: dist
+
+      # --- App Service (agreed Dev design). Uncomment when the Dev Web App exists. ---
+      # - name: Deploy to Azure Dev App Service
+      #   uses: azure/webapps-deploy@v3
+      #   with:
+      #     app-name: ${{ secrets.AZURE_APPSERVICE_NAME_DEV }}
+      #     package: dist
+
+  # ---------------------------------------------------------------------------
+  # JOB 5 — Email 3: success (only if deploy succeeded)
+  # ---------------------------------------------------------------------------
+  notify-success:
+    # If deploy is red, this job is skipped.
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Email 3 - CI/CD Succeeded (Dev deploy completed)
+        # Placeholder until Graph sendMail is wired.
+        run: echo "Send Graph API mail: [DEV] CI/CD SUCCEEDED"
+        # Mail to send: [DEV] CI/CD SUCCEEDED — Dev deploy completed
+
+  # ---------------------------------------------------------------------------
+  # JOB 6 — Email 2: failure (only if something above failed)
+  # ---------------------------------------------------------------------------
+  notify-failure:
+    # Run ONLY when a needed job failed. On a green run this job is skipped (grey).
+    if: failure()
+    # Watch these four jobs so mail still sends whichever one failed.
+    needs: [notify-start, test, build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Email 2 - CI/CD Failed
+        # Placeholder until Graph sendMail is wired.
+        run: echo "Send Graph API mail: [DEV] CI/CD FAILED"
+        # Mail to send: [DEV] CI/CD FAILED
