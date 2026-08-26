@@ -41,6 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       # Send the "Started" email using secrets + Python.
       - name: Send CI/CD Started email
+        continue-on-error: true
         env:
           # Inbox that receives the mail (GitHub secret MAIL_TO).
           MAIL_TO: ${{ secrets.MAIL_TO }}
@@ -77,14 +78,14 @@ jobs:
     steps:
       # Fresh machine: download the repo again.
       - uses: actions/checkout@v4
-      - name: Run basic checks
-        run: |
-          echo "Running Dev automated tests..."
-          # Fail if README.md is missing (-f = this path is a file).
-          test -f README.md
-          # Fail if .github folder is missing (-d = this path is a directory).
-          test -d .github
-          echo "All basic checks passed."
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install -r requirements.txt
+      - name: Run pytest
+        run: python -m pytest -q --tb=short
 
   # ---------------------------------------------------------------------------
   # JOB 3 — Build package ONCE (Function App package + App Service package)
@@ -100,22 +101,20 @@ jobs:
       # Pretend Function App build output (this test repo has no real app build).
       - name: Create Function App package
         run: |
-          # Create the output folder.
           mkdir -p packages/function
-          # Copy a file into it so the folder is not empty.
-          cp README.md packages/function/
-          # Write UTC time into build-info.txt (> = create/overwrite file).
+          cp -r src requirements.txt README.md pytest.ini packages/function/
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/function/build-info.txt
-          # Append the git commit (>> = add to the end of the file).
           echo "commit=${{ github.sha }}" >> packages/function/build-info.txt
+          echo "artifact=function-package" >> packages/function/build-info.txt
 
       # Pretend App Service / Web App build output.
       - name: Create App Service package
         run: |
           mkdir -p packages/appservice
-          cp README.md packages/appservice/
+          cp -r src requirements.txt README.md pytest.ini packages/appservice/
           echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > packages/appservice/build-info.txt
           echo "commit=${{ github.sha }}" >> packages/appservice/build-info.txt
+          echo "artifact=appservice-package" >> packages/appservice/build-info.txt
 
       # Save Function package so the deploy job can download it later.
       # (When a job ends, its Ubuntu machine is deleted.)
@@ -186,6 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Send CI/CD Succeeded email
+        continue-on-error: true
         env:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
@@ -213,6 +213,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Send CI/CD Failed email
+        continue-on-error: true
         env:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
