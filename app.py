@@ -1,4 +1,4 @@
-"""Vercel FastAPI entrypoint. Instance MUST be named `app`."""
+"""FastAPI app for Vercel. File is app.py so / is not a .py download."""
 import os
 import sys
 from pathlib import Path
@@ -8,7 +8,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 APP_ENV = os.getenv("APP_ENV", "preview")
 APP_NAME = os.getenv("APP_NAME", "operations-api")
@@ -23,29 +23,9 @@ try:
     from ops_api import __version__ as ops_version
 
     _ops = create_ops()
-except Exception as exc:  # keep the site up even if domain import fails
+except Exception as exc:
     ops_version = "n/a"
     _ops_error = str(exc)
-
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>{APP_NAME}</title>
-<style>
-body{{font-family:system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#0f172a}}
-a{{color:#2563eb}} code{{background:#f1f5f9;padding:2px 6px;border-radius:4px}}
-.ok{{color:#15803d;font-weight:700}}
-</style></head><body>
-<h1>Operations API is live</h1>
-<p class="ok">Vercel 404 is fixed. FastAPI is serving this page.</p>
-<ul>
-<li>env: <code>{APP_ENV}</code></li>
-<li>secret configured: <code>{str(HAS_SECRET).lower()}</code></li>
-<li>ops version: <code>{ops_version}</code></li>
-</ul>
-<p>JSON: <a href="/health">/health</a> · <a href="/env-check">/env-check</a> · <a href="/orders/demo">/orders/demo</a></p>
-</body></html>"""
 
 
 @app.get("/health")
