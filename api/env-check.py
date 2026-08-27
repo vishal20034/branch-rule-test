@@ -1,5 +1,9 @@
 from http.server import BaseHTTPRequestHandler
-from api._shared import env_payload, send_json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.vercel_shared import env_payload, send_json
 
 
 class handler(BaseHTTPRequestHandler):
