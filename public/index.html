@@ -24,9 +24,9 @@
     <h1>Operations API</h1>
     <p>Dev / preview host on Vercel. JSON API is on the same domain.</p>
     <div class="row">
-      <a href="/health">/health</a>
-      <a href="/env-check">/env-check</a>
-      <a href="/orders/demo">/orders/demo</a>
+      <a href="/api/health">/health</a>
+      <a href="/api/env-check">/env-check</a>
+      <a href="/api/orders">/orders/demo</a>
       <button type="button" id="ping">Ping API</button>
     </div>
     <pre id="out">Click Ping API…</pre>
@@ -36,7 +36,7 @@
       const out = document.getElementById('out');
       out.textContent = 'loading…';
       try {
-        const res = await fetch('/health');
+        const res = await fetch('/api/health');
         const text = await res.text();
         out.textContent = res.status + ' ' + text;
       } catch (e) {
