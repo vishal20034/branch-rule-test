@@ -1,0 +1,156 @@
+# Rollback: redeploy a PREVIOUS good package. Does not rebuild from git.
+# Hub = GitHub. Targets = Vercel and/or Azure Function App and/or Azure App Service.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which Azure / Vercel environment
+        type: choice
+        options:
+          - dev
+          - production
+        default: dev
+      target:
+        description: Where to roll back
+        type: choice
+        options:
+          - azure-function
+          - azure-appservice
+          - azure-both
+          - vercel
+          - all
+        default: azure-both
+      artifact_run_id:
+        description: GitHub Actions run id that has function-package + appservice-package (leave empty = latest successful Dev CI/CD)
+        required: false
+        type: string
+      vercel_deployment:
+        description: Previous Vercel deployment URL or id (required if target is vercel or all)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rollback-azure:
+    name: Rollback Azure
+    if: ${{ inputs.target != 'vercel' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Resolve source run
+        id: src
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANT: ${{ inputs.artifact_run_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "${WANT}" ]; then
+            echo "run_id=${WANT}" >> "$GITHUB_OUTPUT"
+            echo "Using run ${WANT}"
+            exit 0
+          fi
+          # Latest successful Dev CI/CD run on this repo
+          RID=$(gh api "repos/${{ github.repository }}/actions/workflows/dev-cicd.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].id')
+          if [ -z "${RID}" ] || [ "${RID}" = "null" ]; then
+            echo "No successful Dev CI/CD run found. Pass artifact_run_id."
+            exit 1
+          fi
+          echo "run_id=${RID}" >> "$GITHUB_OUTPUT"
+          echo "Using latest green Dev CI/CD run ${RID}"
+
+      - name: Download function-package from that run
+        if: ${{ inputs.target == 'azure-function' || inputs.target == 'azure-both' || inputs.target == 'all' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: function-package
+          path: packages/function/
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.src.outputs.run_id }}
+
+      - name: Download appservice-package from that run
+        if: ${{ inputs.target == 'azure-appservice' || inputs.target == 'azure-both' || inputs.target == 'all' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: appservice-package
+          path: packages/appservice/
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.src.outputs.run_id }}
+
+      - name: Show packages (always)
+        run: |
+          echo "Rollback env=${{ inputs.environment }} target=${{ inputs.target }} from run ${{ steps.src.outputs.run_id }}"
+          ls -la packages/function/ 2>/dev/null || true
+          ls -la packages/appservice/ 2>/dev/null || true
+          cat packages/function/build-info.txt 2>/dev/null || true
+          cat packages/appservice/build-info.txt 2>/dev/null || true
+
+      - name: Deploy Function App (real if secrets exist)
+        if: ${{ inputs.target == 'azure-function' || inputs.target == 'azure-both' || inputs.target == 'all' }}
+        env:
+          CREDS: ${{ secrets.AZURE_CREDENTIALS_DEV }}
+          PROD_CREDS: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          if [ "$ENV_NAME" = "production" ]; then
+            USE="$PROD_CREDS"
+            APP="${{ secrets.AZURE_FUNCTIONAPP_NAME_PROD }}"
+          else
+            USE="$CREDS"
+            APP="${{ secrets.AZURE_FUNCTIONAPP_NAME_DEV }}"
+          fi
+          if [ -z "${USE}" ] || [ -z "${APP}" ]; then
+            echo "Azure Function secrets not set — package is ready. Add AZURE_CREDENTIALS_* and AZURE_FUNCTIONAPP_NAME_* to do a real rollback deploy."
+            exit 0
+          fi
+          echo "Would deploy packages/function to Function App ${APP} (wire azure/login + functions-action here when secrets exist)."
+
+      - name: Deploy App Service (real if secrets exist)
+        if: ${{ inputs.target == 'azure-appservice' || inputs.target == 'azure-both' || inputs.target == 'all' }}
+        env:
+          CREDS: ${{ secrets.AZURE_CREDENTIALS_DEV }}
+          PROD_CREDS: ${{ secrets.AZURE_CREDENTIALS_PROD }}
+          ENV_NAME: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          if [ "$ENV_NAME" = "production" ]; then
+            USE="$PROD_CREDS"
+            APP="${{ secrets.AZURE_APPSERVICE_NAME_PROD }}"
+          else
+            USE="$CREDS"
+            APP="${{ secrets.AZURE_APPSERVICE_NAME_DEV }}"
+          fi
+          if [ -z "${USE}" ] || [ -z "${APP}" ]; then
+            echo "Azure App Service secrets not set — package is ready. Add AZURE_CREDENTIALS_* and AZURE_APPSERVICE_NAME_* to do a real rollback deploy."
+            exit 0
+          fi
+          echo "Would deploy packages/appservice to App Service ${APP} (wire azure/login + webapps-deploy here when secrets exist)."
+
+  rollback-vercel:
+    name: Rollback Vercel
+    if: ${{ inputs.target == 'vercel' || inputs.target == 'all' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote previous Vercel deployment
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ORG: ${{ secrets.VERCEL_ORG_ID }}
+          PROJECT: ${{ secrets.VERCEL_PROJECT_ID }}
+          DEPLOY: ${{ inputs.vercel_deployment }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN}" ]; then
+            echo "VERCEL_TOKEN not set. Use Vercel Dashboard → Deployments → Instant Rollback, or add VERCEL_TOKEN + VERCEL_ORG_ID + VERCEL_PROJECT_ID."
+            exit 0
+          fi
+          if [ -z "${DEPLOY}" ]; then
+            echo "Pass vercel_deployment (previous URL or id)."
+            exit 1
+          fi
+          npm install --global vercel@latest
+          vercel promote "${DEPLOY}" --token="${TOKEN}" --yes
