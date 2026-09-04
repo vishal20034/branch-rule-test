@@ -1,0 +1,19 @@
+format_version: 10
+pipelines:
+  pilot-ascode:
+    group: defaultGroup
+    materials:
+      app_git:
+        git: https://github.com/vishal20034/branch-rule-test.git
+        branch: main
+    stages:
+      - build:
+          clean_workspace: true
+          jobs:
+            hello:
+              tasks:
+                - exec:
+                    command: cmd
+                    arguments:
+                      - /c
+                      - echo GoCD pipelines-as-code OK && dir
