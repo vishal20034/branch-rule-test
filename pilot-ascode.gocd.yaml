@@ -17,3 +17,8 @@ pipelines:
                     arguments:
                       - /c
                       - echo GoCD pipelines-as-code OK && dir
+                - exec:
+                    command: cmd
+                    arguments:
+                      - /c
+                      - python -m pytest -q
