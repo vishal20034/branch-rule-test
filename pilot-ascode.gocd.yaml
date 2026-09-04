@@ -21,4 +21,4 @@ pipelines:
                     command: cmd
                     arguments:
                       - /c
-                      - "C:\Users\X240\AppData\Local\Microsoft\WindowsApps\python.exe" -m pip install pytest && "C:\Users\X240\AppData\Local\Programs\Python\Python313\python.exe" -m pytest -q
+                      - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install pytest && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
