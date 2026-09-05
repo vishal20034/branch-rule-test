@@ -2,23 +2,38 @@ format_version: 10
 pipelines:
   pilot-ascode:
     group: defaultGroup
+    environment_variables:
+      AZURE_CLIENT_ID: dea2db96-01e1-4d0c-8469-281c11c2839c
+      AZURE_TENANT_ID: fc1cb0cb-c771-42b2-8eb0-dc230282504a
+      AZURE_SUBSCRIPTION_ID: aa7e7e16-5d9d-4c45-88c9-c94a268644a4
+      AZURE_RG: rg-pilot-dev
+      AZURE_WEBAPP: test-webapp
     materials:
       app_git:
         git: https://github.com/vishal20034/branch-rule-test.git
         branch: main
     stages:
-      - build:
+      - test:
           clean_workspace: true
           jobs:
-            hello:
+            pytest:
               tasks:
                 - exec:
                     command: cmd
                     arguments:
                       - /c
-                      - echo GoCD pipelines-as-code OK && dir
+                      - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install pytest flask gunicorn && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
+      - deploy:
+          jobs:
+            azure:
+              tasks:
                 - exec:
                     command: cmd
                     arguments:
                       - /c
-                      - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install pytest && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
+                      - tar -a -c -f package.zip app.py requirements.txt
+                - exec:
+                    command: cmd
+                    arguments:
+                      - /c
+                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az login --service-principal -u %AZURE_CLIENT_ID% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID% && az account set --subscription %AZURE_SUBSCRIPTION_ID% && az webapp deploy --resource-group %AZURE_RG% --name %AZURE_WEBAPP% --src-path package.zip --type zip
