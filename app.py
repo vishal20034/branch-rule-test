@@ -7,7 +7,15 @@ from uuid import uuid4
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
+APP_VERSION = "2026.09.07-3"
+
 app = Flask(__name__)
+
+
+@app.context_processor
+def inject_version():
+    return {"version": APP_VERSION}
+
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 _lock = Lock()
@@ -152,6 +160,7 @@ def health():
             "notes": len(data["notes"]),
             "checks_done": sum(1 for v in data["checks"].values() if v),
             "updated": data.get("updated"),
+            "version": APP_VERSION,
         }
     )
 
