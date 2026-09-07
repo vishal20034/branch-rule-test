@@ -1,10 +1,11 @@
+import os
 from datetime import datetime, timezone
 from threading import Lock
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 app = Flask(__name__)
-app.secret_key = "pilot-demo-not-for-production"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 _lock = Lock()
 _notes = []

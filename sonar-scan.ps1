@@ -34,6 +34,13 @@ if (-not $jar) { throw "sonar-scanner-cli jar not found under D:\sonar-scanner\l
 $t = [Environment]::GetEnvironmentVariable("SONAR_TOKEN", "Machine")
 if (-not $t) { throw "missing SONAR_TOKEN system variable" }
 
+
+$py = "C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe"
+Write-Host "Generating Python coverage.xml"
+& $py -m pip install -q pytest pytest-cov flask gunicorn
+& $py -m pytest -q --cov=app --cov-report=xml:coverage.xml
+if (-not (Test-Path "coverage.xml")) { Write-Host "WARN: coverage.xml missing" }
+
 Write-Host "Using jar $($jar.FullName)"
 & $java -Xms64m -Xmx256m -XX:+UseSerialGC -jar $jar.FullName "-Dsonar.token=$t" "-Dsonar.qualitygate.wait=true"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
