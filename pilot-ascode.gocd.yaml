@@ -17,7 +17,7 @@ pipelines:
                     arguments:
                       - /c
                       - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install -r requirements.txt pytest && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
-       - sonar:
+      - sonar:
           jobs:
             quality:
               tasks:
