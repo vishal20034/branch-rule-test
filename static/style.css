@@ -96,3 +96,13 @@ code { font-family: Consolas, monospace; font-size: 0.9em; }
 .steps li.ok strong { color: #2c6e3a; }
 .kv { border-collapse: collapse; }
 .kv th, .kv td { text-align: left; padding: 0.4rem 0.8rem 0.4rem 0; }
+
+.inline { display: inline; }
+.card button.ghost, .ghost {
+  background: transparent; color: var(--ink); border: 1px solid var(--line);
+  margin-top: 0.5rem; padding: 0.35rem 0.7rem; cursor: pointer; font: inherit;
+}
+.small { font-size: 0.8rem; }
+.search { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; }
+.search input { flex: 1; }
+.row-links { display: flex; gap: 1rem; align-items: center; margin-top: 0.8rem; }

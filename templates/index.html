@@ -4,8 +4,10 @@
   <p class="kicker">Live board</p>
   <h1>Operator board</h1>
   <p class="lead">
-    Checklist and notes run on this Web App. Health is live from
-    <code>/health</code>. Stages <strong>{{ done }}</strong> / <strong>{{ total }}</strong> marked done.
+    Checklist and notes persist on this Web App (JSON file). Health is live.
+    Stages <strong>{{ done }}</strong> / <strong>{{ total }}</strong> done
+    · {{ note_count }} notes
+    {% if updated %}· last save {{ updated }}{% endif %}
   </p>
   <p id="live-health" class="health-line">Checking health…</p>
 </section>
@@ -19,10 +21,17 @@
       <label><input type="checkbox" name="deploy" {% if checks.deploy %}checked{% endif %} /> Azure deploy verified</label>
       <button type="submit">Save checklist</button>
     </form>
+    <form method="post" action="{{ url_for('reset_checks') }}" class="inline">
+      <button type="submit" class="ghost">Reset ticks</button>
+    </form>
   </section>
 
   <section class="card">
     <h2>Release notes</h2>
+    <form method="get" action="{{ url_for('home') }}" class="search">
+      <input name="q" value="{{ q }}" placeholder="Search notes" />
+      <button type="submit">Search</button>
+    </form>
     <form method="post" action="{{ url_for('add_note') }}">
       <input name="author" placeholder="Your name" maxlength="40" />
       <textarea name="text" rows="3" placeholder="What changed in this release?" required></textarea>
@@ -32,14 +41,23 @@
       <ul class="notes">
         {% for n in notes %}
           <li>
-            <span class="meta">{{ n.at }} · {{ n.author }}</span>
+            <span class="meta">{{ n.at }} · {{ n.author }} · {{ n.id }}</span>
             <p>{{ n.text }}</p>
+            <form method="post" action="{{ url_for('delete_note', note_id=n.id) }}">
+              <button type="submit" class="ghost small">Delete</button>
+            </form>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty">No notes yet. Add one after a green GoCD run.</p>
+      <p class="empty">No notes{% if q %} match “{{ q }}”{% else %} yet{% endif %}.</p>
     {% endif %}
+    <p class="row-links">
+      <a href="{{ url_for('export_json') }}">Export JSON</a>
+      <form method="post" action="{{ url_for('clear_notes') }}" class="inline">
+        <button type="submit" class="ghost small">Clear all notes</button>
+      </form>
+    </p>
   </section>
 </div>
 <script>
