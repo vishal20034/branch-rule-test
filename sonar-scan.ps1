@@ -17,21 +17,23 @@ foreach ($root in $roots) {
     }
   }
 }
-if (-not $jdk) {
-  throw "JDK 17 folder not found under Program Files\Java or Microsoft. Install JDK 17 first."
-}
+if (-not $jdk) { throw "JDK 17 folder not found." }
 
 $env:JAVA_HOME = $jdk.FullName
-$env:Path = "$env:JAVA_HOME\bin;" + $env:Path
+$java = Join-Path $env:JAVA_HOME "bin\java.exe"
 Write-Host "JAVA_HOME=$env:JAVA_HOME"
-& "$env:JAVA_HOME\bin\java.exe" -version
+& $java -version
 
-$env:SONAR_SCANNER_OPTS = [Environment]::GetEnvironmentVariable("SONAR_SCANNER_OPTS", "Machine")
-if (-not $env:SONAR_SCANNER_OPTS) {
-  $env:SONAR_SCANNER_OPTS = "-Xms64m -Xmx256m -XX:+UseSerialGC"
+$jar = Get-ChildItem "D:\sonar-scanner\lib\sonar-scanner-cli-*.jar" -ErrorAction SilentlyContinue |
+  Select-Object -First 1
+if (-not $jar) {
+  $jar = Get-ChildItem "D:\Sonar-scanner\lib\sonar-scanner-cli-*.jar" | Select-Object -First 1
 }
+if (-not $jar) { throw "sonar-scanner-cli jar not found under D:\sonar-scanner\lib" }
+
 $t = [Environment]::GetEnvironmentVariable("SONAR_TOKEN", "Machine")
 if (-not $t) { throw "missing SONAR_TOKEN system variable" }
 
-& "D:\sonar-scanner\bin\sonar-scanner.bat" "-Dsonar.token=$t" "-Dsonar.qualitygate.wait=true"
+Write-Host "Using jar $($jar.FullName)"
+& $java -Xms64m -Xmx256m -XX:+UseSerialGC -jar $jar.FullName "-Dsonar.token=$t" "-Dsonar.qualitygate.wait=true"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
