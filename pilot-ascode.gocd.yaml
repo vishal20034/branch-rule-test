@@ -29,8 +29,9 @@ pipelines:
                     arguments:
                       - /c
                       - tar -a -c -f package.zip app.py requirements.txt
-                - exec:
-                    command: cmd
+               - exec:
+                    command: powershell
                     arguments:
-                      - /c
-                      - curl.exe -f -X POST -u "%AZURE_PUBLISH_USER%:%AZURE_PUBLISH_PASS%" --data-binary @package.zip https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy
+                      - -NoProfile
+                      - -Command
+                      - $u = [Environment]::GetEnvironmentVariable('AZURE_PUBLISH_USER','Machine'); $p = [Environment]::GetEnvironmentVariable('AZURE_PUBLISH_PASS','Machine'); Write-Host ('USER=[' + $u + '] len_pass=' + $(if ($p) {$p.Length} else {0})); if (-not $u -or -not $p) { throw 'missing AZURE_PUBLISH_USER or AZURE_PUBLISH_PASS' }; curl.exe -f -S -X POST -u ($u + ':' + $p) --data-binary @package.zip https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy
