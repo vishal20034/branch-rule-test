@@ -32,8 +32,8 @@ pipelines:
                     arguments:
                       - /c
                       - tar -a -c -f package.zip app.py requirements.txt
-      - exec:
+                - exec:
                     command: cmd
                     arguments:
                       - /c
-                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az login --service-principal -u %AZURE_CLIENT_ID% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID% --allow-no-subscriptions && az webapp deploy --subscription %AZURE_SUBSCRIPTION_ID% --resource-group %AZURE_RG% --name %AZURE_WEBAPP% --src-path package.zip --type zipD% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID% && az account set --subscription %AZURE_SUBSCRIPTION_ID% && az webapp deploy --resource-group %AZURE_RG% --name %AZURE_WEBAPP% --src-path package.zip --type zip
+                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az login --service-principal -u %AZURE_CLIENT_ID% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID% --allow-no-subscriptions && az webapp deploy --subscription %AZURE_SUBSCRIPTION_ID% --resource-group %AZURE_RG% --name %AZURE_WEBAPP% --src-path package.zip --type zip
