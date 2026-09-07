@@ -33,4 +33,4 @@ pipelines:
                     command: cmd
                     arguments:
                       - /c
-                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az webapp deploy --resource-group rg-pilot-dev --name test-webapp --src-path package.zip --type zip --username %AZURE_PUBLISH_USER% --password %AZURE_PUBLISH_PASS%
+                      - curl.exe -f -X POST -u "%AZURE_PUBLISH_USER%:%AZURE_PUBLISH_PASS%" --data-binary @package.zip https://test-webapp.scm.azurewebsites.net/api/zipdeploy
