@@ -16,16 +16,20 @@ pipelines:
                     command: cmd
                     arguments:
                       - /c
-                      - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install pytest flask gunicorn && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
-      - deploy:
+                      - C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pip install -r requirements.txt pytest && C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe -m pytest -q
+      - sonar:
           jobs:
-            azure:
+            quality:
               tasks:
                 - exec:
                     command: cmd
                     arguments:
                       - /c
-                      - tar -a -c -f package.zip app.py requirements.txt
+                      - set SONAR_SCANNER_OPTS=-Xms64m -Xmx256m -XX:+UseSerialGC&& D:/sonar-scanner/bin/sonar-scanner.bat -Dsonar.host.url=%SONAR_HOST_URL% -Dsonar.token=%SONAR_TOKEN% -Dsonar.qualitygate.wait=true
+      - deploy:
+          jobs:
+            azure:
+              tasks:
                 - exec:
                     command: powershell
                     arguments:
