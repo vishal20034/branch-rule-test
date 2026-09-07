@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="hero">
+  <p class="kicker">Live on Azure</p>
+  <h1>This page is the pipeline output.</h1>
+  <p class="lead">
+    A push to <code>main</code> runs pytest, SonarQube, then publishes this site
+    to App Service. If you can read this, deploy succeeded.
+  </p>
+  <p>
+    <a class="btn" href="/pipeline">See the three stages</a>
+    <a class="btn ghost" href="/health">Health check</a>
+  </p>
+</section>
+<section class="grid">
+  <article>
+    <h2>1. GitHub</h2>
+    <p>Source of truth. Pipeline YAML, Sonar properties, Flask templates.</p>
+  </article>
+  <article>
+    <h2>2. GoCD on AVD</h2>
+    <p>Agent runs tests and scan, then curls a zip to Kudu.</p>
+  </article>
+  <article>
+    <h2>3. Azure</h2>
+    <p>Linux Python 3.11 Web App. Startup: gunicorn app:app.</p>
+  </article>
+</section>
+{% endblock %}

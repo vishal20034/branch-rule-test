@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="hero">
+  <p class="kicker">pilot-ascode</p>
+  <h1>What runs on every push to main</h1>
+</section>
+<ol class="steps">
+  <li>
+    <strong>test</strong>
+    <span>pytest on the AVD Agent. Red here means no Sonar and no Azure.</span>
+  </li>
+  <li>
+    <strong>sonar</strong>
+    <span>Quality gate on SonarQube (http://127.0.0.1:9000). Red here means no Azure.</span>
+  </li>
+  <li>
+    <strong>deploy</strong>
+    <span>package.zip (app + templates + static) posted to the scm host.</span>
+  </li>
+</ol>
+<p class="note">GoCD material auto_update is on. Wait about one minute after git push. Do not Rerun Failed after YAML changes — use a new run.</p>
+{% endblock %}
