@@ -3,9 +3,6 @@ pipelines:
   pilot-ascode:
     group: defaultGroup
     environment_variables:
-      AZURE_CLIENT_ID: dea2db96-01e1-4d0c-8469-281c11c2839c
-      AZURE_TENANT_ID: fc1cb0cb-c771-42b2-8eb0-dc230282504a
-      AZURE_SUBSCRIPTION_ID: aa7e7e16-5d9d-4c45-88c9-c94a268644a4
       AZURE_RG: rg-pilot-dev
       AZURE_WEBAPP: test-webapp
     materials:
@@ -36,4 +33,4 @@ pipelines:
                     command: cmd
                     arguments:
                       - /c
-                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az login --service-principal -u %AZURE_CLIENT_ID% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID% --allow-no-subscriptions && az webapp deploy --subscription %AZURE_SUBSCRIPTION_ID% --resource-group %AZURE_RG% --name %AZURE_WEBAPP% --src-path package.zip --type zip
+                      - set "PATH=C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;%PATH%" && az webapp deploy --resource-group rg-pilot-dev --name test-webapp --src-path package.zip --type zip --username %AZURE_PUBLISH_USER% --password %AZURE_PUBLISH_PASS%
