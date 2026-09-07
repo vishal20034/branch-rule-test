@@ -1,0 +1,77 @@
+
+:root {
+  --ink: #0f2744;
+  --muted: #5b6573;
+  --paper: #f4f1ea;
+  --card: #fffdf8;
+  --line: #d9d2c5;
+  --accent: #c45c26;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--ink);
+  background: var(--paper);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 8vw;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.logo { font-weight: 700; color: var(--ink); text-decoration: none; }
+nav a {
+  margin-left: 1.25rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+nav a.on, nav a:hover { color: var(--accent); }
+main { flex: 1; padding: 2.5rem 8vw 4rem; }
+.kicker {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.15; margin: 0 0 0.75rem; }
+.lead { font-size: 1.15rem; color: var(--muted); max-width: 40rem; }
+.btn {
+  display: inline-block;
+  margin: 1rem 0.5rem 0 0;
+  padding: 0.65rem 1.1rem;
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 2px;
+}
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+.grid article {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 1.25rem 1.35rem;
+}
+.steps { max-width: 40rem; padding-left: 1.2rem; }
+.steps li { margin: 0.9rem 0; }
+.steps span { display: block; color: var(--muted); margin-top: 0.2rem; }
+.note { margin-top: 2rem; color: var(--muted); max-width: 40rem; }
+footer {
+  padding: 1rem 8vw;
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+code { font-family: Consolas, monospace; font-size: 0.9em; }
