@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="hero">
+  <p class="kicker">Health</p>
+  <h1>{{ payload.status }}</h1>
+  <p class="lead">Service <code>{{ payload.service }}</code> at {{ payload.time }}.</p>
+</section>
+<table class="kv">
+  <tr><th>Notes stored</th><td>{{ payload.notes }}</td></tr>
+  <tr><th>Checks marked</th><td>{{ payload.checks_done }}</td></tr>
+  <tr><th>JSON</th><td><a href="/health">/health</a></td></tr>
+</table>
+{% endblock %}

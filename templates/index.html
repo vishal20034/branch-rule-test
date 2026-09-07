@@ -1,29 +1,56 @@
 {% extends "base.html" %}
 {% block body %}
 <section class="hero">
-  <p class="kicker">Release candidate · Live on Azure</p>
-  <h1>This page is the pipeline output.</h1>
+  <p class="kicker">Live board</p>
+  <h1>Operator board</h1>
   <p class="lead">
-    A push to <code>main</code> runs pytest, SonarQube, then publishes this site
-    to App Service. If you can read this, deploy succeeded.
+    Checklist and notes run on this Web App. Health is live from
+    <code>/health</code>. Stages <strong>{{ done }}</strong> / <strong>{{ total }}</strong> marked done.
   </p>
-  <p>
-    <a class="btn" href="/pipeline">See the three stages</a>
-    <a class="btn ghost" href="/health">Health check</a>
-  </p>
+  <p id="live-health" class="health-line">Checking health…</p>
 </section>
-<section class="grid">
-  <article>
-    <h2>1. GitHub</h2>
-    <p>Source of truth. Pipeline YAML, Sonar properties, Flask templates.</p>
-  </article>
-  <article>
-    <h2>2. GoCD on AVD</h2>
-    <p>Agent runs tests and scan, then curls a zip to Kudu.</p>
-  </article>
-  <article>
-    <h2>3. Azure</h2>
-    <p>Linux Python 3.11 Web App. Startup: gunicorn app:app.</p>
-  </article>
-</section>
+
+<div class="split">
+  <section class="card">
+    <h2>Stage checklist</h2>
+    <form method="post" action="{{ url_for('save_checks') }}">
+      <label><input type="checkbox" name="test" {% if checks.test %}checked{% endif %} /> pytest passed</label>
+      <label><input type="checkbox" name="sonar" {% if checks.sonar %}checked{% endif %} /> Sonar quality gate passed</label>
+      <label><input type="checkbox" name="deploy" {% if checks.deploy %}checked{% endif %} /> Azure deploy verified</label>
+      <button type="submit">Save checklist</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Release notes</h2>
+    <form method="post" action="{{ url_for('add_note') }}">
+      <input name="author" placeholder="Your name" maxlength="40" />
+      <textarea name="text" rows="3" placeholder="What changed in this release?" required></textarea>
+      <button type="submit">Add note</button>
+    </form>
+    {% if notes %}
+      <ul class="notes">
+        {% for n in notes %}
+          <li>
+            <span class="meta">{{ n.at }} · {{ n.author }}</span>
+            <p>{{ n.text }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">No notes yet. Add one after a green GoCD run.</p>
+    {% endif %}
+  </section>
+</div>
+<script>
+  fetch("/health")
+    .then((r) => r.json())
+    .then((d) => {
+      document.getElementById("live-health").textContent =
+        "Health " + d.status + " · " + d.service + " · " + d.time;
+    })
+    .catch(() => {
+      document.getElementById("live-health").textContent = "Health check failed";
+    });
+</script>
 {% endblock %}

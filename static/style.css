@@ -75,3 +75,24 @@ footer {
   border-top: 1px solid var(--line);
 }
 code { font-family: Consolas, monospace; font-size: 0.9em; }
+
+.flash { list-style: none; padding: 0.6rem 1rem; background: #e7f3ea; border: 1px solid #b7d7be; }
+.health-line { font-family: Consolas, monospace; color: var(--accent); }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+.card { background: var(--card); border: 1px solid var(--line); padding: 1.2rem 1.3rem; }
+.card label { display: block; margin: 0.45rem 0; }
+.card input[type="text"], .card input[name="author"], .card textarea {
+  width: 100%; margin: 0.35rem 0; padding: 0.45rem 0.5rem;
+  border: 1px solid var(--line); font: inherit;
+}
+.card button {
+  margin-top: 0.6rem; padding: 0.5rem 0.9rem;
+  background: var(--ink); color: #fff; border: 0; cursor: pointer;
+}
+.notes { list-style: none; padding: 0; }
+.notes li { border-top: 1px solid var(--line); padding: 0.6rem 0; }
+.notes .meta { font-size: 0.8rem; color: var(--muted); }
+.empty { color: var(--muted); }
+.steps li.ok strong { color: #2c6e3a; }
+.kv { border-collapse: collapse; }
+.kv th, .kv td { text-align: left; padding: 0.4rem 0.8rem 0.4rem 0; }

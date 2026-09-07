@@ -10,16 +10,21 @@
   <header class="top">
     <a class="logo" href="/">AVD pipeline demo</a>
     <nav>
-      <a href="/" {% if title == "Home" %}class="on"{% endif %}>Home</a>
+      <a href="/" {% if title == "Home" %}class="on"{% endif %}>Board</a>
       <a href="/pipeline" {% if title == "Pipeline" %}class="on"{% endif %}>How it runs</a>
-      <a href="/health">Health JSON</a>
+      <a href="/health/ui" {% if title == "Health" %}class="on"{% endif %}>Health</a>
     </nav>
   </header>
   <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul class="flash">{% for m in messages %}<li>{{ m }}</li>{% endfor %}</ul>
+      {% endif %}
+    {% endwith %}
     {% block body %}{% endblock %}
   </main>
   <footer>
-    Served from Azure App Service · built by GitHub → GoCD → SonarQube → zip deploy
+    Azure App Service · GitHub → GoCD → SonarQube → zip deploy
   </footer>
 </body>
 </html>
