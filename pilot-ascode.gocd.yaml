@@ -2,9 +2,6 @@ format_version: 10
 pipelines:
   pilot-ascode:
     group: defaultGroup
-    environment_variables:
-      AZURE_RG: rg-pilot-dev
-      AZURE_WEBAPP: test-webapp
     materials:
       app_git:
         git: https://github.com/vishal20034/branch-rule-test.git
@@ -29,9 +26,9 @@ pipelines:
                     arguments:
                       - /c
                       - tar -a -c -f package.zip app.py requirements.txt
-               - exec:
+                - exec:
                     command: powershell
                     arguments:
                       - -NoProfile
-                      - -Command
-                      - $u = [Environment]::GetEnvironmentVariable('AZURE_PUBLISH_USER','Machine'); $p = [Environment]::GetEnvironmentVariable('AZURE_PUBLISH_PASS','Machine'); Write-Host ('USER=[' + $u + '] len_pass=' + $(if ($p) {$p.Length} else {0})); if (-not $u -or -not $p) { throw 'missing AZURE_PUBLISH_USER or AZURE_PUBLISH_PASS' }; curl.exe -f -S -X POST -u ($u + ':' + $p) --data-binary @package.zip https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy
+                      - -File
+                      - deploy.ps1
