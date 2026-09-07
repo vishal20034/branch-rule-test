@@ -33,4 +33,4 @@ pipelines:
                     command: cmd
                     arguments:
                       - /c
-                      - curl.exe -f -X POST -u "%AZURE_PUBLISH_USER%:%AZURE_PUBLISH_PASS%" --data-binary @package.zip https://test-webapp.scm.azurewebsites.net/api/zipdeploy
+                      - curl.exe -f -X POST -u "%AZURE_PUBLISH_USER%:%AZURE_PUBLISH_PASS%" --data-binary @package.zip https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy
