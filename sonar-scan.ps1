@@ -43,4 +43,23 @@ if (-not (Test-Path "coverage.xml")) { Write-Host "WARN: coverage.xml missing" }
 
 Write-Host "Using jar $($jar.FullName)"
 & $java -Xms64m -Xmx256m -XX:+UseSerialGC -jar $jar.FullName "-Dsonar.token=$t" "-Dsonar.qualitygate.wait=true"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$scanExit = $LASTEXITCODE
+
+$env:GMAIL_USER = [Environment]::GetEnvironmentVariable("GMAIL_USER", "Machine")
+$env:GMAIL_APP_PASSWORD = [Environment]::GetEnvironmentVariable("GMAIL_APP_PASSWORD", "Machine")
+$env:GMAIL_TO = [Environment]::GetEnvironmentVariable("GMAIL_TO", "Machine")
+$gate = if ($scanExit -eq 0) { "PASSED" } else { "FAILED" }
+$subj = "[GoCD] sonar $gate  $($env:GO_PIPELINE_NAME)/$($env:GO_PIPELINE_COUNTER)"
+$body = @"
+pilot-ascode sonar quality gate: $gate
+Pipeline: $($env:GO_PIPELINE_NAME) #$($env:GO_PIPELINE_COUNTER)
+Job: $($env:GO_STAGE_NAME)/$($env:GO_JOB_NAME)
+Dashboard: http://127.0.0.1:9000/dashboard?id=branch-rule-test
+"@
+try {
+  & $py send-mail.py $subj $body
+} catch {
+  Write-Host "send-mail failed: $_"
+}
+
+if ($scanExit -ne 0) { exit $scanExit }
