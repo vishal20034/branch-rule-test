@@ -16,8 +16,29 @@ if (-not (Test-Path "package.zip")) { throw "package.zip was not created" }
 Write-Host "package.zip created"
 Get-Item "package.zip" | Format-List Name, Length
 
-& curl.exe -f -S -X POST -u ($u + ":" + $p) --data-binary "@package.zip" "https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$url = "https://test-webapp-efepekhyfscpe4fk.scm.westus3-01.azurewebsites.net/api/zipdeploy"
+$resp = "kudu-response.txt"
+if (Test-Path $resp) { Remove-Item $resp -Force }
+
+# Do not use curl -f; print Azure body on 403/401
+$code = & curl.exe -sS -o $resp -w "%{http_code}" -X POST `
+  -H "Content-Type: application/octet-stream" `
+  -H "Cache-Control: no-cache" `
+  -u ($u + ":" + $p) `
+  --data-binary "@package.zip" `
+  $url
+
+Write-Host "KUDU_HTTP=$code"
+if (Test-Path $resp) {
+  Write-Host "----- kudu body -----"
+  Get-Content $resp -Raw
+  Write-Host "----- end body -----"
+}
+
+if ($code -ne "200" -and $code -ne "202") {
+  Write-Host "zipdeploy failed. Enable SCM Basic Auth Publishing on the Web App, download a new publish profile, update AZURE_PUBLISH_USER / AZURE_PUBLISH_PASS, restart Go Agent."
+  exit 22
+}
 
 $env:GMAIL_USER = [Environment]::GetEnvironmentVariable("GMAIL_USER", "Machine")
 $env:GMAIL_APP_PASSWORD = [Environment]::GetEnvironmentVariable("GMAIL_APP_PASSWORD", "Machine")
