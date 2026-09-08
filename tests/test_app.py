@@ -8,6 +8,8 @@ import app as appmod
 def _client(tmp_path, monkeypatch):
     store = tmp_path / "store.json"
     monkeypatch.setattr(appmod, "_store_path", store)
+    appmod.app.config["WTF_CSRF_ENABLED"] = False
+    appmod.app.config["TESTING"] = True
     return appmod.app.test_client()
 
 

@@ -6,6 +6,7 @@ from threading import Lock
 from uuid import uuid4
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask_wtf.csrf import CSRFProtect
 
 APP_VERSION = "2026.09.08"
 SERVICE_NAME = "test-webapp"
@@ -14,6 +15,7 @@ NOTE_LIMIT = 50
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
+csrf = CSRFProtect(app)
 
 _lock = Lock()
 _store_path = Path(os.environ.get("STORE_PATH", "data/store.json"))
@@ -200,4 +202,4 @@ def health_ui():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="127.0.0.1", port=8000)

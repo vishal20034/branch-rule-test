@@ -16,12 +16,14 @@
   <section class="card">
     <h2>Stage checklist</h2>
     <form method="post" action="{{ url_for('save_checks') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <label><input type="checkbox" name="test" {% if checks.test %}checked{% endif %} /> pytest passed</label>
       <label><input type="checkbox" name="sonar" {% if checks.sonar %}checked{% endif %} /> Sonar quality gate passed</label>
       <label><input type="checkbox" name="deploy" {% if checks.deploy %}checked{% endif %} /> Azure deploy verified</label>
       <button type="submit">Save checklist</button>
     </form>
     <form method="post" action="{{ url_for('reset_checks') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <button type="submit" class="ghost">Reset ticks</button>
     </form>
   </section>
@@ -33,6 +35,7 @@
       <button type="submit">Search</button>
     </form>
     <form method="post" action="{{ url_for('add_note') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <input name="author" placeholder="Your name" maxlength="40" />
       <textarea name="text" rows="3" placeholder="What changed in this release?" required></textarea>
       <button type="submit">Add note</button>
@@ -44,6 +47,7 @@
             <span class="meta">{{ n.at }} · {{ n.author }} · {{ n.id }}</span>
             <p>{{ n.text }}</p>
             <form method="post" action="{{ url_for('delete_note', note_id=n.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
               <button type="submit" class="ghost small">Delete</button>
             </form>
           </li>
@@ -55,6 +59,7 @@
     <p class="row-links">
       <a href="{{ url_for('export_json') }}">Export JSON</a>
       <form method="post" action="{{ url_for('clear_notes') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <button type="submit" class="ghost small">Clear all notes</button>
       </form>
     </p>
