@@ -8,7 +8,7 @@ from uuid import uuid4
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFProtect
 
-APP_VERSION = "2026.09.08-qg"
+APP_VERSION = "2026.09.08-web"
 SERVICE_NAME = "test-webapp"
 CHECK_KEYS = ("test", "sonar", "deploy")
 NOTE_LIMIT = 50
@@ -162,6 +162,11 @@ def reset_checks():
         _save(data)
     flash("Checklist reset.")
     return redirect(url_for("home"))
+
+
+@app.get("/about")
+def about():
+    return render_template("about.html", title="About")
 
 
 @app.get("/pipeline")

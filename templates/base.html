@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ title }} · AVD pipeline demo</title>
+  <title>{{ title }} · Pipeline Board</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
   <header class="top">
-    <a class="logo" href="/">AVD pipeline demo</a>
+    <a class="logo" href="/">Pipeline Board</a>
     <nav>
       <a href="/" {% if title == "Home" %}class="on"{% endif %}>Board</a>
-      <a href="/pipeline" {% if title == "Pipeline" %}class="on"{% endif %}>How it runs</a>
+      <a href="/pipeline" {% if title == "Pipeline" %}class="on"{% endif %}>Pipeline</a>
       <a href="/health/ui" {% if title == "Health" %}class="on"{% endif %}>Health</a>
+      <a href="/about" {% if title == "About" %}class="on"{% endif %}>About</a>
     </nav>
   </header>
   <main>
@@ -24,7 +25,7 @@
     {% block body %}{% endblock %}
   </main>
   <footer>
-    Azure App Service · GitHub → GoCD → SonarQube · v{{ version }}
+    GitHub → GoCD → SonarQube → Azure App Service · v{{ version }}
   </footer>
 </body>
 </html>

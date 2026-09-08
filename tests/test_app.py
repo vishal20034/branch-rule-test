@@ -62,3 +62,9 @@ def test_pipeline_page(tmp_path, monkeypatch):
     res = _client(tmp_path, monkeypatch).get("/pipeline")
     assert res.status_code == 200
     assert b"pytest" in res.data.lower()
+
+
+def test_about_page(tmp_path, monkeypatch):
+    res = _client(tmp_path, monkeypatch).get("/about")
+    assert res.status_code == 200
+    assert b"Flask" in res.data

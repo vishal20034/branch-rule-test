@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% block body %}
 <section class="hero">
-  <p class="kicker">Live board</p>
+  <p class="kicker">Live on Azure</p>
   <h1>Operator board</h1>
   <p class="lead">
-    Checklist and notes persist on this Web App (JSON file). Health is live.
-    Stages <strong>{{ done }}</strong> / <strong>{{ total }}</strong> done
+    Track pytest, SonarQube and Azure deploy. Save release notes on this Web App.
+    <strong>{{ done }}</strong> / <strong>{{ total }}</strong> stages ticked
     · {{ note_count }} notes
     {% if updated %}· last save {{ updated }}{% endif %}
   </p>
   <p id="live-health" class="health-line">Checking health…</p>
 </section>
+
+<div class="stats">
+  <article><span>Version</span><strong>{{ version }}</strong></article>
+  <article><span>Notes</span><strong>{{ note_count }}</strong></article>
+  <article><span>Stages done</span><strong>{{ done }}/{{ total }}</strong></article>
+</div>
 
 <div class="split">
   <section class="card">
@@ -47,7 +53,7 @@
             <span class="meta">{{ n.at }} · {{ n.author }} · {{ n.id }}</span>
             <p>{{ n.text }}</p>
             <form method="post" action="{{ url_for('delete_note', note_id=n.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
               <button type="submit" class="ghost small">Delete</button>
             </form>
           </li>
@@ -59,7 +65,7 @@
     <p class="row-links">
       <a href="{{ url_for('export_json') }}">Export JSON</a>
       <form method="post" action="{{ url_for('clear_notes') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <button type="submit" class="ghost small">Clear all notes</button>
       </form>
     </p>
@@ -70,7 +76,7 @@
     .then((r) => r.json())
     .then((d) => {
       document.getElementById("live-health").textContent =
-        "Health " + d.status + " · " + d.service + " · " + d.time;
+        "Health " + d.status + " · " + d.service + " · v" + d.version + " · " + d.time;
     })
     .catch(() => {
       document.getElementById("live-health").textContent = "Health check failed";

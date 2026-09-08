@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="hero">
+  <p class="kicker">Python on Azure</p>
+  <h1>About this website</h1>
+  <p class="lead">
+    This is a Flask app used to prove the CI/CD path:
+    GitHub main → GoCD (pytest + SonarQube) → zip deploy to Azure App Service.
+  </p>
+</section>
+<div class="grid">
+  <article>
+    <h2>Stack</h2>
+    <p>Python 3.11, Flask, gunicorn, pytest, flask-wtf CSRF. Stored as JSON on disk.</p>
+  </article>
+  <article>
+    <h2>CI/CD</h2>
+    <p>GoCD pipeline <code>pilot-ascode</code> on the AVD. Sonar quality gate can block Azure.</p>
+  </article>
+  <article>
+    <h2>Health</h2>
+    <p>JSON at <code>/health</code>. If this page loads, gunicorn imported <code>app:app</code>.</p>
+  </article>
+</div>
+{% endblock %}
