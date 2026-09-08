@@ -7,25 +7,29 @@ from uuid import uuid4
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
-APP_VERSION = "2026.09.07-3"
+APP_VERSION = "2026.09.08"
+SERVICE_NAME = "test-webapp"
+CHECK_KEYS = ("test", "sonar", "deploy")
+NOTE_LIMIT = 50
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
+
+_lock = Lock()
+_store_path = Path(os.environ.get("STORE_PATH", "data/store.json"))
+
+
+def _empty_store():
+    return {
+        "checks": {key: False for key in CHECK_KEYS},
+        "notes": [],
+        "updated": None,
+    }
 
 
 @app.context_processor
 def inject_version():
     return {"version": APP_VERSION}
-
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-
-_lock = Lock()
-_store_path = Path(os.environ.get("STORE_PATH", "data/store.json"))
-
-DEFAULT = {
-    "checks": {"test": False, "sonar": False, "deploy": False},
-    "notes": [],
-    "updated": None,
-}
 
 
 def _now():
@@ -34,13 +38,15 @@ def _now():
 
 def _load():
     if not _store_path.exists():
-        return json.loads(json.dumps(DEFAULT))
+        return _empty_store()
     try:
         data = json.loads(_store_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return json.loads(json.dumps(DEFAULT))
-    data.setdefault("checks", dict(DEFAULT["checks"]))
-    data.setdefault("notes", [])
+        return _empty_store()
+    checks = data.get("checks") or {}
+    data["checks"] = {key: bool(checks.get(key)) for key in CHECK_KEYS}
+    notes = data.get("notes") or []
+    data["notes"] = notes if isinstance(notes, list) else []
     data.setdefault("updated", None)
     return data
 
@@ -53,24 +59,40 @@ def _save(data):
     tmp.replace(_store_path)
 
 
+def _health_payload(data):
+    return {
+        "status": "ok",
+        "service": SERVICE_NAME,
+        "time": _now(),
+        "notes": len(data["notes"]),
+        "checks_done": sum(1 for value in data["checks"].values() if value),
+        "updated": data.get("updated"),
+        "version": APP_VERSION,
+    }
+
+
 @app.get("/")
 def home():
-    q = (request.args.get("q") or "").strip().lower()
+    query = (request.args.get("q") or "").strip().lower()
     with _lock:
         data = _load()
     notes = data["notes"]
-    if q:
-        notes = [n for n in notes if q in n.get("text", "").lower() or q in n.get("author", "").lower()]
+    if query:
+        notes = [
+            note
+            for note in notes
+            if query in note.get("text", "").lower()
+            or query in note.get("author", "").lower()
+        ]
     checks = data["checks"]
-    done = sum(1 for v in checks.values() if v)
     return render_template(
         "index.html",
         title="Home",
         notes=notes,
         checks=checks,
-        done=done,
+        done=sum(1 for value in checks.values() if value),
         total=len(checks),
-        q=q,
+        q=query,
         updated=data.get("updated"),
         note_count=len(data["notes"]),
     )
@@ -79,7 +101,7 @@ def home():
 @app.post("/notes")
 def add_note():
     text = (request.form.get("text") or "").strip()
-    author = (request.form.get("author") or "operator").strip()[:40]
+    author = (request.form.get("author") or "operator").strip()[:40] or "operator"
     if not text:
         flash("Note cannot be empty.")
         return redirect(url_for("home"))
@@ -87,9 +109,14 @@ def add_note():
         data = _load()
         data["notes"].insert(
             0,
-            {"id": uuid4().hex[:8], "text": text[:500], "author": author, "at": _now()},
+            {
+                "id": uuid4().hex[:8],
+                "text": text[:500],
+                "author": author,
+                "at": _now(),
+            },
         )
-        data["notes"] = data["notes"][:50]
+        data["notes"] = data["notes"][:NOTE_LIMIT]
         _save(data)
     flash("Note saved.")
     return redirect(url_for("home"))
@@ -99,7 +126,7 @@ def add_note():
 def delete_note(note_id):
     with _lock:
         data = _load()
-        data["notes"] = [n for n in data["notes"] if n.get("id") != note_id]
+        data["notes"] = [note for note in data["notes"] if note.get("id") != note_id]
         _save(data)
     flash("Note deleted.")
     return redirect(url_for("home"))
@@ -119,8 +146,7 @@ def clear_notes():
 def save_checks():
     with _lock:
         data = _load()
-        for key in data["checks"]:
-            data["checks"][key] = request.form.get(key) == "on"
+        data["checks"] = {key: request.form.get(key) == "on" for key in CHECK_KEYS}
         _save(data)
     flash("Checklist updated.")
     return redirect(url_for("home"))
@@ -130,7 +156,7 @@ def save_checks():
 def reset_checks():
     with _lock:
         data = _load()
-        data["checks"] = {"test": False, "sonar": False, "deploy": False}
+        data["checks"] = {key: False for key in CHECK_KEYS}
         _save(data)
     flash("Checklist reset.")
     return redirect(url_for("home"))
@@ -152,17 +178,7 @@ def pipeline():
 def health():
     with _lock:
         data = _load()
-    return jsonify(
-        {
-            "status": "ok",
-            "service": "test-webapp",
-            "time": _now(),
-            "notes": len(data["notes"]),
-            "checks_done": sum(1 for v in data["checks"].values() if v),
-            "updated": data.get("updated"),
-            "version": APP_VERSION,
-        }
-    )
+    return jsonify(_health_payload(data))
 
 
 @app.get("/export.json")
@@ -176,15 +192,11 @@ def export_json():
 def health_ui():
     with _lock:
         data = _load()
-    payload = {
-        "status": "ok",
-        "service": "test-webapp",
-        "time": _now(),
-        "notes": len(data["notes"]),
-        "checks_done": sum(1 for v in data["checks"].values() if v),
-        "updated": data.get("updated"),
-    }
-    return render_template("health.html", title="Health", payload=payload)
+    return render_template(
+        "health.html",
+        title="Health",
+        payload=_health_payload(data),
+    )
 
 
 if __name__ == "__main__":
