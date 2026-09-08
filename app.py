@@ -8,7 +8,7 @@ from uuid import uuid4
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFProtect
 
-APP_VERSION = "2026.09.08"
+APP_VERSION = "2026.09.08-qg"
 SERVICE_NAME = "test-webapp"
 CHECK_KEYS = ("test", "sonar", "deploy")
 NOTE_LIMIT = 50
