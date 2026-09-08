@@ -11,7 +11,7 @@ if (-not (Test-Path "app.py")) { throw "app.py not found in workspace" }
 if (-not (Test-Path "requirements.txt")) { throw "requirements.txt not found in workspace" }
 
 if (Test-Path "package.zip") { Remove-Item "package.zip" -Force }
-& tar -a -c -f package.zip app.py requirements.txt templates static
+& tar -a -c -f package.zip app.py requirements.txt templates static startup.sh .deployment
 if (-not (Test-Path "package.zip")) { throw "package.zip was not created" }
 Write-Host "package.zip created"
 Get-Item "package.zip" | Format-List Name, Length
