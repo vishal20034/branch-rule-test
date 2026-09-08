@@ -13,6 +13,14 @@ pipelines:
             pytest:
               tasks:
                 - exec:
+                    command: powershell
+                    arguments:
+                      - -NoProfile
+                      - -ExecutionPolicy
+                      - Bypass
+                      - -File
+                      - notify-start.ps1
+                - exec:
                     command: cmd
                     arguments:
                       - /c
