@@ -41,6 +41,12 @@ Write-Host "Generating Python coverage.xml"
 & $py -m pytest -q --cov=app --cov-report=xml:coverage.xml
 if (-not (Test-Path "coverage.xml")) { Write-Host "WARN: coverage.xml missing" }
 
+$env:SONAR_TOKEN = $t
+$env:SONAR_HOST_URL = "http://127.0.0.1:9000"
+$env:SONAR_PROJECT_KEY = "branch-rule-test"
+Write-Host "Ensuring Sonar quality gate pilot-gate"
+try { & $py ensure_quality_gate.py } catch { Write-Host "ensure_quality_gate failed: $_" }
+
 Write-Host "Using jar $($jar.FullName)"
 & $java -Xms64m -Xmx256m -XX:+UseSerialGC -jar $jar.FullName "-Dsonar.token=$t" "-Dsonar.qualitygate.wait=true"
 $scanExit = $LASTEXITCODE
