@@ -37,7 +37,7 @@ if (-not $t) { throw "missing SONAR_TOKEN system variable" }
 
 $py = "C:/Users/X240/AppData/Local/Programs/Python/Python313/python.exe"
 Write-Host "Generating Python coverage.xml"
-& $py -m pip install -q pytest pytest-cov flask gunicorn
+& $py -m pip install -q -r requirements.txt pytest pytest-cov
 & $py -m pytest -q --cov=app --cov-report=xml:coverage.xml
 if (-not (Test-Path "coverage.xml")) { Write-Host "WARN: coverage.xml missing" }
 
