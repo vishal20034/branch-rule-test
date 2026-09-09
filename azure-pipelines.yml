@@ -60,11 +60,7 @@ stages:
       fetchDepth: 0
       persistCredentials: true
 
-    - script: |
-        python3 send_mail.py "[CI/CD] Started" "Repo $(Build.Repository.Name)
-Branch $(Build.SourceBranchName)
-Action ${{ parameters.action }}
-Run $(Build.BuildUri)"
+    - script: python3 send_mail.py "[CI/CD] Started" "Repo $(Build.Repository.Name) branch $(Build.SourceBranchName) action ${{ parameters.action }} run $(Build.BuildId)"
       displayName: Email - CI/CD started
       env:
         GMAIL_USER: $(mailUser)
@@ -100,9 +96,7 @@ Run $(Build.BuildUri)"
       workingDirectory: $(projectRoot)
       displayName: Create antenv and install requirements
 
-    - script: |
-        python3 send_mail.py "[CI/CD] SonarQube started" "Sonar analysis starting for $(Build.SourceBranchName).
-Run $(Build.BuildUri)"
+    - script: python3 send_mail.py "[CI/CD] SonarQube started" "Sonar starting for $(Build.SourceBranchName) run $(Build.BuildId)"
       displayName: Email - SonarQube started
       condition: ne('${{ parameters.action }}', 'rollback')
       env:
@@ -160,9 +154,7 @@ Run $(Build.BuildUri)"
       inputs:
         pollingTimeoutSec: '300'
 
-    - script: |
-        python3 send_mail.py "[CI/CD] SonarQube PASSED" "Quality gate passed for $(Build.SourceBranchName).
-Run $(Build.BuildUri)"
+    - script: python3 send_mail.py "[CI/CD] SonarQube PASSED" "Quality gate passed for $(Build.SourceBranchName) run $(Build.BuildId)"
       displayName: Email - SonarQube passed
       condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
       env:
@@ -170,10 +162,7 @@ Run $(Build.BuildUri)"
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
 
-    - script: |
-        python3 send_mail.py "[CI/CD] FAILED" "Build or Sonar failed for $(Build.SourceBranchName).
-Action ${{ parameters.action }}
-Run $(Build.BuildUri)"
+    - script: python3 send_mail.py "[CI/CD] FAILED" "Build or Sonar failed for $(Build.SourceBranchName) action ${{ parameters.action }} run $(Build.BuildId)"
       displayName: Email - CI/CD failed
       condition: failed()
       env:
@@ -227,10 +216,7 @@ Run $(Build.BuildUri)"
         deploy:
           steps:
           - checkout: self
-          - script: |
-              python3 send_mail.py "[CI/CD] Deploy started" "Deploying $(webAppName)
-Action ${{ parameters.action }}
-Run $(Build.BuildUri)"
+          - script: python3 send_mail.py "[CI/CD] Deploy started" "Deploying $(webAppName) action ${{ parameters.action }} run $(Build.BuildId)"
             displayName: Email - Deploy started
             env:
               GMAIL_USER: $(mailUser)
@@ -242,19 +228,13 @@ Run $(Build.BuildUri)"
               azureSubscription: $(azureServiceConnectionId)
               appName: $(webAppName)
               package: $(Pipeline.Workspace)/drop/$(packageName)
-          - script: |
-              python3 send_mail.py "[CI/CD] Deploy SUCCEEDED" "test-webapp deploy succeeded.
-Action ${{ parameters.action }}
-Run $(Build.BuildUri)"
+          - script: python3 send_mail.py "[CI/CD] Deploy SUCCEEDED" "test-webapp deploy succeeded action ${{ parameters.action }} run $(Build.BuildId)"
             displayName: Email - Deploy succeeded
             env:
               GMAIL_USER: $(mailUser)
               GMAIL_APP_PASSWORD: $(mailPass)
               GMAIL_TO: $(mailTo)
-          - script: |
-              python3 send_mail.py "[CI/CD] Deploy FAILED" "test-webapp deploy failed.
-Action ${{ parameters.action }}
-Run $(Build.BuildUri)"
+          - script: python3 send_mail.py "[CI/CD] Deploy FAILED" "test-webapp deploy failed action ${{ parameters.action }} run $(Build.BuildId)"
             displayName: Email - Deploy failed
             condition: failed()
             env:
