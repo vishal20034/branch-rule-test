@@ -83,7 +83,7 @@ stages:
       workingDirectory: $(projectRoot)
       displayName: Create antenv and install requirements
 
-    - task: SonarQubePrepare@6
+    - task: SonarQubePrepare@5
       displayName: SonarQube prepare
       condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
@@ -108,11 +108,11 @@ stages:
       displayName: Pytest with coverage
       condition: ne('${{ parameters.action }}', 'rollback')
 
-    - task: SonarQubeAnalyze@6
+    - task: SonarQubeAnalyze@5
       displayName: SonarQube analyze
       condition: ne('${{ parameters.action }}', 'rollback')
 
-    - task: SonarQubePublish@6
+    - task: SonarQubePublish@5
       displayName: SonarQube publish
       condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
