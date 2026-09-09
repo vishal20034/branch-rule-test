@@ -100,10 +100,24 @@ stages:
           sonar.qualitygate.wait=true
 
     - script: |
+        python3 - << 'PY'
+        import json, os
+        raw = os.environ.get("SONARQUBE_SCANNER_PARAMS") or "{}"
+        data = json.loads(raw)
+        for key in list(data):
+            if key.startswith("sonar.branch.") or key.startswith("sonar.pullrequest."):
+                data.pop(key, None)
+        line = "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]" + json.dumps(data, separators=(",", ":"))
+        print(line)
+        PY
+      displayName: Strip branch params (Sonar Community Edition)
+      condition: ne('${{ parameters.action }}', 'rollback')
+
+    - script: |
         set -e
         source antenv/bin/activate
         python -m pip install pytest pytest-cov
-        pytest -q --cov=app --cov-report=xml:coverage.xml
+        pytest -q tests --cov=app --cov-report=xml:coverage.xml --tb=short
       workingDirectory: $(projectRoot)
       displayName: Pytest with coverage
       condition: ne('${{ parameters.action }}', 'rollback')
