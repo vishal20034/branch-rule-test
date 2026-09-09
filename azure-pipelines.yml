@@ -153,16 +153,16 @@ stages:
       inputs:
         pollingTimeoutSec: '300'
 
-    - script: python3 send_mail.py "[CI/CD] SonarQube PASSED" "Quality gate passed for $(Build.SourceBranchName) run $(Build.BuildId)"
-      displayName: Email - SonarQube passed
+    - script: python3 sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
+      displayName: Email - SonarQube passed + report
       condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
       env:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
 
-    - script: python3 send_mail.py "[CI/CD] FAILED" "Build or Sonar failed for $(Build.SourceBranchName) action ${{ parameters.action }} run $(Build.BuildId)"
-      displayName: Email - CI/CD failed
+    - script: python3 sonar_mail.py FAILED "[CI/CD] FAILED"
+      displayName: Email - CI/CD failed + Sonar report
       condition: failed()
       env:
         GMAIL_USER: $(mailUser)
