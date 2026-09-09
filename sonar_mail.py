@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a SonarQube summary and send it via send_mail.py."""
+import base64
 import json
 import os
 import subprocess
@@ -9,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+LOCAL_DASH = "http://127.0.0.1:9000/dashboard?id=branch-rule-test"
 
 
 def report_task():
@@ -45,31 +47,40 @@ def token_and_host(task):
 
 
 def api_get(url, tok):
+    auth = "Basic " + base64.b64encode((tok + ":").encode()).decode()
     req = urllib.request.Request(
         url,
         headers={
-            "Authorization": "Bearer " + tok,
-            "ngrok-skip-browser-warning": "1",
+            "Authorization": auth,
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "Mozilla/5.0 (compatible; AzurePipeline/1.0)",
         },
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+        raw = resp.read().decode()
+        if raw.lstrip().startswith("<"):
+            raise RuntimeError("Sonar returned HTML (ngrok warning page), not JSON")
+        return json.loads(raw)
 
 
 def build_body(status_word):
     task = report_task()
     tok, host = token_and_host(task)
     key = task.get("projectKey") or "branch-rule-test"
-    dash = task.get("dashboardUrl") or (host + "/dashboard?id=" + key if host else "")
     lines = [
         "SonarQube report",
         "Status: " + status_word,
         "Project: " + key,
-        "Dashboard: " + dash,
+        "",
+        "Open the report on the AVD (this works, no ngrok warning):",
+        "  " + LOCAL_DASH,
+        "",
+        "If you are not on the AVD, use the ngrok link and click Visit Site once:",
+        "  " + (host + "/dashboard?id=" + key if host else "(no remote host)"),
         "",
     ]
     if not host or not tok:
-        lines.append("Could not call Sonar API (missing host or token). Open the dashboard link.")
+        lines.append("Could not load metrics (missing host or token). Use the AVD link above.")
         return "\n".join(lines)
     try:
         qg = api_get(host + "/api/qualitygates/project_status?projectKey=" + key, tok)
@@ -94,9 +105,9 @@ def build_body(status_word):
         )
         for m in ((meas.get("component") or {}).get("measures") or []):
             lines.append("{0}: {1}".format(m.get("metric"), m.get("value")))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-        lines.append("API extra details failed: " + str(exc))
-        lines.append("Use the dashboard link above.")
+    except Exception as exc:
+        lines.append("Live metrics could not be fetched: " + str(exc))
+        lines.append("Use the AVD dashboard link above.")
     return "\n".join(lines)
 
 
