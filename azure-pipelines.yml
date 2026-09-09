@@ -1,14 +1,17 @@
 # GitHub + Azure Pipelines + Sonar. No GoCD.
 #
 # Auto (push to rc / rc-* / rc/*):
-#   Build + tests + Sonar. NO Azure deploy.
+#   Build + tests + Sonar. Mails: started, Sonar started, pass/fail. NO Azure deploy.
 #
 # Prod deploy:
-#   Run pipeline → Action = deploy → (optional) Environment approve.
+#   Run pipeline → Action = deploy → Environment approve.
+#   Mails: started, Sonar, deploy started, deploy pass/fail.
 #
 # Rollback:
-#   Run pipeline → Action = rollback → Branch to deploy = e.g. main
-#   Skips Sonar so an old branch can still be restored.
+#   Run pipeline → Action = rollback → Branch to deploy.
+#   Skips Sonar. Mail start + deploy result.
+#
+# Set secret pipeline variables: GMAIL_USER, GMAIL_APP_PASSWORD, GMAIL_TO
 
 trigger:
   branches:
@@ -41,6 +44,9 @@ variables:
   projectRoot: $(System.DefaultWorkingDirectory)
   pythonVersion: '3.11'
   packageName: app.zip
+  mailUser: $(GMAIL_USER)
+  mailPass: $(GMAIL_APP_PASSWORD)
+  mailTo: $(GMAIL_TO)
 
 stages:
 - stage: Build
@@ -53,6 +59,17 @@ stages:
     - checkout: self
       fetchDepth: 0
       persistCredentials: true
+
+    - script: |
+        python3 send_mail.py "[CI/CD] Started" "Repo $(Build.Repository.Name)
+Branch $(Build.SourceBranchName)
+Action ${{ parameters.action }}
+Run $(Build.BuildUri)"
+      displayName: Email - CI/CD started
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
 
     - script: |
         set -e
@@ -82,6 +99,16 @@ stages:
         pip install -r requirements.txt
       workingDirectory: $(projectRoot)
       displayName: Create antenv and install requirements
+
+    - script: |
+        python3 send_mail.py "[CI/CD] SonarQube started" "Sonar analysis starting for $(Build.SourceBranchName).
+Run $(Build.BuildUri)"
+      displayName: Email - SonarQube started
+      condition: ne('${{ parameters.action }}', 'rollback')
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
 
     - task: SonarQubePrepare@7
       displayName: SonarQube prepare
@@ -134,6 +161,27 @@ stages:
         pollingTimeoutSec: '300'
 
     - script: |
+        python3 send_mail.py "[CI/CD] SonarQube PASSED" "Quality gate passed for $(Build.SourceBranchName).
+Run $(Build.BuildUri)"
+      displayName: Email - SonarQube passed
+      condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
+    - script: |
+        python3 send_mail.py "[CI/CD] FAILED" "Build or Sonar failed for $(Build.SourceBranchName).
+Action ${{ parameters.action }}
+Run $(Build.BuildUri)"
+      displayName: Email - CI/CD failed
+      condition: failed()
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
+    - script: |
         set -e
         STAGING="$(Build.ArtifactStagingDirectory)/pkg"
         rm -rf "$STAGING"
@@ -178,9 +226,38 @@ stages:
       runOnce:
         deploy:
           steps:
+          - checkout: self
+          - script: |
+              python3 send_mail.py "[CI/CD] Deploy started" "Deploying $(webAppName)
+Action ${{ parameters.action }}
+Run $(Build.BuildUri)"
+            displayName: Email - Deploy started
+            env:
+              GMAIL_USER: $(mailUser)
+              GMAIL_APP_PASSWORD: $(mailPass)
+              GMAIL_TO: $(mailTo)
           - task: AzureWebApp@1
             displayName: Deploy test-webapp
             inputs:
               azureSubscription: $(azureServiceConnectionId)
               appName: $(webAppName)
               package: $(Pipeline.Workspace)/drop/$(packageName)
+          - script: |
+              python3 send_mail.py "[CI/CD] Deploy SUCCEEDED" "test-webapp deploy succeeded.
+Action ${{ parameters.action }}
+Run $(Build.BuildUri)"
+            displayName: Email - Deploy succeeded
+            env:
+              GMAIL_USER: $(mailUser)
+              GMAIL_APP_PASSWORD: $(mailPass)
+              GMAIL_TO: $(mailTo)
+          - script: |
+              python3 send_mail.py "[CI/CD] Deploy FAILED" "test-webapp deploy failed.
+Action ${{ parameters.action }}
+Run $(Build.BuildUri)"
+            displayName: Email - Deploy failed
+            condition: failed()
+            env:
+              GMAIL_USER: $(mailUser)
+              GMAIL_APP_PASSWORD: $(mailPass)
+              GMAIL_TO: $(mailTo)
