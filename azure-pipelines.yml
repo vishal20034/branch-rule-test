@@ -1,27 +1,37 @@
-# Python to Linux Web App on Azure
-# Build your Python project and deploy it to Azure as a Linux Web App.
-# Change python version to one thats appropriate for your application.
-# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+# CI on rc/* automatically (Build + Sonar).
+# Deploy to Azure ONLY when someone clicks Run pipeline (manual).
+# Rollback = Run pipeline → set Action = rollback → pick Branch to deploy.
+# GitHub: only rc/* (and rc / rc-*) may merge to main.
 
 trigger:
-- main
+  branches:
+    include:
+      - rc
+      - rc/*
+      - rc-*
+
+pr: none
+
+parameters:
+  - name: action
+    displayName: Action
+    type: string
+    default: ci
+    values:
+      - ci
+      - deploy
+      - rollback
+  - name: rollbackBranch
+    displayName: Branch to deploy (used when Action = rollback)
+    type: string
+    default: main
 
 variables:
-  # Azure Resource Manager connection created during pipeline creation
   azureServiceConnectionId: 'd3ebfeec-7df4-41b6-bbdd-03353e1c1272'
-
-  # Web app name
   webAppName: 'test-webapp'
-
-  # Agent VM image name
   vmImageName: 'ubuntu-latest'
-
-  # Environment name
   environmentName: 'test-webapp'
-
-  # Project root folder. Point to the folder containing manage.py file.
   projectRoot: $(System.DefaultWorkingDirectory)
-
   pythonVersion: '3.11'
 
 stages:
@@ -32,6 +42,22 @@ stages:
     pool:
       vmImage: $(vmImageName)
     steps:
+    - checkout: self
+      fetchDepth: 0
+      persistCredentials: true
+
+    - script: |
+        set -e
+        ACTION="${{ parameters.action }}"
+        BRANCH="${{ parameters.rollbackBranch }}"
+        echo "Action=$ACTION SourceBranch=$(Build.SourceBranch) RollbackBranch=$BRANCH"
+        if [ "$ACTION" = "rollback" ]; then
+          git fetch origin
+          git checkout "$BRANCH"
+          echo "Checked out rollback branch $BRANCH at $(git rev-parse --short HEAD)"
+        fi
+      displayName: Checkout rollback branch if requested
+
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '$(pythonVersion)'
@@ -41,13 +67,42 @@ stages:
         python -m venv antenv
         source antenv/bin/activate
         python -m pip install --upgrade pip
-        pip install setup
+        pip install setuptools wheel
         pip install -r requirements.txt
       workingDirectory: $(projectRoot)
-      displayName: "Install requirements"
+      displayName: Install requirements
+
+    - task: SonarQubePrepare@6
+      displayName: SonarQube prepare
+      inputs:
+        SonarQube: 'test-sonar'
+        scannerMode: 'CLI'
+        configMode: 'manual'
+        cliProjectKey: 'branch-rule-test'
+        extraProperties: |
+          sonar.python.version=3.11
+          sonar.sources=.
+          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**
+
+    - script: |
+        source antenv/bin/activate
+        python -m pip install pytest pytest-cov
+        pytest -q --cov=app --cov-report=xml:coverage.xml || true
+      workingDirectory: $(projectRoot)
+      displayName: Tests and coverage
+      continueOnError: true
+
+    - task: SonarQubeAnalyze@6
+      displayName: SonarQube analyze
+
+    - task: SonarQubePublish@6
+      displayName: SonarQube publish
+      inputs:
+        pollingTimeoutSec: '300'
+      continueOnError: true
 
     - task: ArchiveFiles@2
-      displayName: 'Archive files'
+      displayName: Archive files
       inputs:
         rootFolderOrFile: '$(projectRoot)'
         includeRootFolder: false
@@ -56,13 +111,21 @@ stages:
         replaceExistingArchive: true
 
     - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-      displayName: 'Upload package'
+      displayName: Upload package
       artifact: drop
 
 - stage: Deploy
-  displayName: 'Deploy Web App'
+  displayName: Deploy Web App (manual only)
   dependsOn: Build
-  condition: succeeded()
+  condition: |
+    and(
+      succeeded(),
+      or(
+        eq('${{ parameters.action }}', 'deploy'),
+        eq('${{ parameters.action }}', 'rollback'),
+        eq(variables['Build.Reason'], 'Manual')
+      )
+    )
   jobs:
   - deployment: DeploymentJob
     pool:
@@ -72,12 +135,10 @@ stages:
       runOnce:
         deploy:
           steps:
-
           - task: UsePythonVersion@0
             inputs:
               versionSpec: '$(pythonVersion)'
-            displayName: 'Use Python version'
-
+            displayName: Use Python version
           - task: AzureWebApp@1
             displayName: 'Deploy Azure Web App : test-webapp'
             inputs:

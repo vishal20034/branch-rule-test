@@ -21,7 +21,8 @@ jobs:
             const headRef = context.payload.pull_request.head.ref;
             const prNumber = context.payload.pull_request.number;
 
-            if (!headRef.startsWith('rc/')) {
+            const ok = headRef === 'rc' || headRef.startsWith('rc/') || headRef.startsWith('rc-');
+            if (!ok) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,

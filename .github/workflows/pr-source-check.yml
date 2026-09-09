@@ -12,10 +12,15 @@ jobs:
     steps:
       - name: Verify PR source branch
         run: |
-          echo "Source branch: ${{ github.head_ref }}"
+          SRC="${{ github.head_ref }}"
+          echo "Source branch: $SRC"
           echo "Target branch: ${{ github.base_ref }}"
-          if [[ "${{ github.head_ref }}" != rc/* ]]; then
-            echo "❌ PRs into main must come from an rc/* branch."
-            exit 1
-          fi
-          echo "✅ Source branch is valid."
+          case "$SRC" in
+            rc|rc/*|rc-*)
+              echo "OK: PRs into main must come from an rc branch."
+              ;;
+            *)
+              echo "PRs into main must come from rc, rc/*, or rc-*."
+              exit 1
+              ;;
+          esac
