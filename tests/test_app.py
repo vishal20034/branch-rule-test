@@ -68,3 +68,10 @@ def test_about_page(tmp_path, monkeypatch):
     res = _client(tmp_path, monkeypatch).get("/about")
     assert res.status_code == 200
     assert b"Flask" in res.data
+
+
+def test_api_notify(tmp_path, monkeypatch):
+    c = _client(tmp_path, monkeypatch)
+    res = c.post("/api/notify", json={"event": "build.complete"})
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True

@@ -206,5 +206,15 @@ def health_ui():
     )
 
 
+@app.route("/api/notify", methods=["GET", "POST"])
+@csrf.exempt
+def api_notify():
+    """Azure DevOps Service hook target. Must return 200, no redirect."""
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = {"form": request.form.to_dict(), "args": request.args.to_dict()}
+    return jsonify({"ok": True, "received": True, "method": request.method}), 200
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=8000)
