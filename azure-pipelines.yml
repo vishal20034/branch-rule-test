@@ -1,9 +1,10 @@
 # GitHub + Azure Pipelines + Sonar. No GoCD.
 #
 # AUTOMATIC:
-#   Push/merge to rc  → Build + Sonar + mail. No Azure.
-#   Push/merge to main → Build + Sonar + mail + Deploy stage
-#                        (Deploy waits on Environment approval if you set it).
+#   Push/merge to rc  → Build + Sonar + mail + Deploy (Environment approval).
+#   After prod deploy → Soak 6-7 hours. Do NOT merge to main yet.
+#   After soak        → mail "PR rc to main now".
+#   Push/merge to main → Build + Sonar only. No Azure (main is the proven record).
 #
 # MANUAL:
 #   Run pipeline → Action = deploy or rollback.
@@ -202,7 +203,7 @@ stages:
           or(
             eq('${{ parameters.action }}', 'deploy'),
             eq('${{ parameters.action }}', 'rollback'),
-            eq(variables['Build.SourceBranch'], 'refs/heads/main')
+            startsWith(variables['Build.SourceBranch'], 'refs/heads/rc')
           )
         )
       env:
@@ -219,7 +220,7 @@ stages:
       or(
         eq('${{ parameters.action }}', 'deploy'),
         eq('${{ parameters.action }}', 'rollback'),
-        eq(variables['Build.SourceBranch'], 'refs/heads/main')
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/rc')
       )
     )
   jobs:
@@ -244,7 +245,7 @@ stages:
               azureSubscription: $(azureServiceConnectionId)
               appName: $(webAppName)
               package: $(Pipeline.Workspace)/drop/$(packageName)
-          - script: python3 send_mail.py "[CI/CD] Implementation done" "CI/CD implementation done. test-webapp deploy succeeded. action ${{ parameters.action }} run $(Build.BuildId)"
+          - script: python3 send_mail.py "[CI/CD] Implementation done" "CI/CD implementation done. Production is live. Do NOT merge rc into main for 6-7 hours. Watch logs. Soak is waiting. run $(Build.BuildId)"
             displayName: Email - CI/CD implementation done
             env:
               GMAIL_USER: $(mailUser)
@@ -257,3 +258,33 @@ stages:
               GMAIL_USER: $(mailUser)
               GMAIL_APP_PASSWORD: $(mailPass)
               GMAIL_TO: $(mailTo)
+
+- stage: Soak
+  displayName: Soak 6-7 hours (do not merge to main)
+  dependsOn: Deploy
+  condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
+  jobs:
+  - job: wait_soak
+    displayName: Wait 6-7 hours
+    pool: server
+    timeoutInMinutes: 450
+    steps:
+    - task: ManualValidation@1
+      timeoutInMinutes: 420
+      inputs:
+        notifyUsers: $(GMAIL_TO)
+        instructions: "Production soak. Wait 6 to 7 hours. Watch Azure logs. Do NOT merge rc into main until this step is Resumed or it times out (7 hours)."
+        onTimeout: resume
+  - job: soak_done_mail
+    displayName: Email - soak done PR to main
+    dependsOn: wait_soak
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - checkout: self
+    - script: python3 send_mail.py "[CI/CD] Soak done - PR rc to main" "6-7 hour production soak is complete. You may now open a pull request from rc into main. $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+      displayName: Email - soak complete
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
