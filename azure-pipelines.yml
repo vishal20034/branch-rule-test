@@ -1,7 +1,14 @@
-# CI on rc/* automatically (Build + Sonar).
-# Deploy to Azure ONLY when someone clicks Run pipeline (manual).
-# Rollback = Run pipeline → set Action = rollback → pick Branch to deploy.
-# GitHub: only rc/* (and rc / rc-*) may merge to main.
+# GitHub + Azure Pipelines + Sonar. No GoCD.
+#
+# Auto (push to rc / rc-* / rc/*):
+#   Build + tests + Sonar. NO Azure deploy.
+#
+# Prod deploy:
+#   Run pipeline → Action = deploy → (optional) Environment approve.
+#
+# Rollback:
+#   Run pipeline → Action = rollback → Branch to deploy = e.g. main
+#   Skips Sonar so an old branch can still be restored.
 
 trigger:
   branches:
@@ -22,7 +29,7 @@ parameters:
       - deploy
       - rollback
   - name: rollbackBranch
-    displayName: Branch to deploy (used when Action = rollback)
+    displayName: Branch to deploy (rollback only)
     type: string
     default: main
 
@@ -33,10 +40,11 @@ variables:
   environmentName: 'test-webapp'
   projectRoot: $(System.DefaultWorkingDirectory)
   pythonVersion: '3.11'
+  packageName: app.zip
 
 stages:
 - stage: Build
-  displayName: Build stage
+  displayName: Build
   jobs:
   - job: BuildJob
     pool:
@@ -50,30 +58,34 @@ stages:
         set -e
         ACTION="${{ parameters.action }}"
         BRANCH="${{ parameters.rollbackBranch }}"
-        echo "Action=$ACTION SourceBranch=$(Build.SourceBranch) RollbackBranch=$BRANCH"
+        echo "Action=$ACTION"
+        echo "Pipeline branch=$(Build.SourceBranch)"
+        echo "Rollback branch=$BRANCH"
         if [ "$ACTION" = "rollback" ]; then
           git fetch origin
-          git checkout "$BRANCH"
-          echo "Checked out rollback branch $BRANCH at $(git rev-parse --short HEAD)"
+          git checkout -f "$BRANCH" || git checkout -f "origin/$BRANCH"
+          echo "Now at $(git rev-parse --abbrev-ref HEAD) $(git rev-parse --short HEAD)"
         fi
       displayName: Checkout rollback branch if requested
 
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '$(pythonVersion)'
-      displayName: 'Use Python $(pythonVersion)'
+      displayName: Use Python $(pythonVersion)
 
     - script: |
+        set -e
         python -m venv antenv
         source antenv/bin/activate
         python -m pip install --upgrade pip
         pip install setuptools wheel
         pip install -r requirements.txt
       workingDirectory: $(projectRoot)
-      displayName: Install requirements
+      displayName: Create antenv and install requirements
 
     - task: SonarQubePrepare@6
       displayName: SonarQube prepare
+      condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
         SonarQube: 'test-sonar'
         scannerMode: 'CLI'
@@ -82,48 +94,64 @@ stages:
         extraProperties: |
           sonar.python.version=3.11
           sonar.sources=.
-          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**
+          sonar.tests=tests
+          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**
+          sonar.python.coverage.reportPaths=coverage.xml
+          sonar.qualitygate.wait=true
 
     - script: |
+        set -e
         source antenv/bin/activate
         python -m pip install pytest pytest-cov
-        pytest -q --cov=app --cov-report=xml:coverage.xml || true
+        pytest -q --cov=app --cov-report=xml:coverage.xml
       workingDirectory: $(projectRoot)
-      displayName: Tests and coverage
-      continueOnError: true
+      displayName: Pytest with coverage
+      condition: ne('${{ parameters.action }}', 'rollback')
 
     - task: SonarQubeAnalyze@6
       displayName: SonarQube analyze
+      condition: ne('${{ parameters.action }}', 'rollback')
 
     - task: SonarQubePublish@6
       displayName: SonarQube publish
+      condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
         pollingTimeoutSec: '300'
-      continueOnError: true
+
+    - script: |
+        set -e
+        STAGING="$(Build.ArtifactStagingDirectory)/pkg"
+        rm -rf "$STAGING"
+        mkdir -p "$STAGING"
+        cp -a antenv app.py requirements.txt "$STAGING/"
+        cp -a templates static "$STAGING/"
+        [ -f startup.sh ] && cp -a startup.sh "$STAGING/"
+        [ -f .deployment ] && cp -a .deployment "$STAGING/"
+      workingDirectory: $(projectRoot)
+      displayName: Stage package (app + antenv, no .git)
 
     - task: ArchiveFiles@2
-      displayName: Archive files
+      displayName: Zip package
       inputs:
-        rootFolderOrFile: '$(projectRoot)'
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/pkg'
         includeRootFolder: false
         archiveType: zip
-        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(packageName)
         replaceExistingArchive: true
 
-    - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-      displayName: Upload package
+    - upload: $(Build.ArtifactStagingDirectory)/$(packageName)
+      displayName: Upload artifact
       artifact: drop
 
 - stage: Deploy
-  displayName: Deploy Web App (manual only)
+  displayName: Deploy Web App
   dependsOn: Build
   condition: |
     and(
       succeeded(),
       or(
         eq('${{ parameters.action }}', 'deploy'),
-        eq('${{ parameters.action }}', 'rollback'),
-        eq(variables['Build.Reason'], 'Manual')
+        eq('${{ parameters.action }}', 'rollback')
       )
     )
   jobs:
@@ -135,13 +163,9 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: UsePythonVersion@0
-            inputs:
-              versionSpec: '$(pythonVersion)'
-            displayName: Use Python version
           - task: AzureWebApp@1
-            displayName: 'Deploy Azure Web App : test-webapp'
+            displayName: Deploy test-webapp
             inputs:
               azureSubscription: $(azureServiceConnectionId)
               appName: $(webAppName)
-              package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
+              package: $(Pipeline.Workspace)/drop/$(packageName)
