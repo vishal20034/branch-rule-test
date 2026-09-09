@@ -117,6 +117,7 @@ stages:
         set -e
         source antenv/bin/activate
         python -m pip install pytest pytest-cov
+        export PYTHONPATH="$(pwd)"
         pytest -q tests --cov=app --cov-report=xml:coverage.xml --tb=short
       workingDirectory: $(projectRoot)
       displayName: Pytest with coverage
