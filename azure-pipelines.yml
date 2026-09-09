@@ -83,12 +83,12 @@ stages:
       workingDirectory: $(projectRoot)
       displayName: Create antenv and install requirements
 
-    - task: SonarQubePrepare@5
+    - task: SonarQubePrepare@7
       displayName: SonarQube prepare
       condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
         SonarQube: 'test-sonar'
-        scannerMode: 'CLI'
+        scannerMode: 'cli'
         configMode: 'manual'
         cliProjectKey: 'branch-rule-test'
         extraProperties: |
@@ -108,11 +108,11 @@ stages:
       displayName: Pytest with coverage
       condition: ne('${{ parameters.action }}', 'rollback')
 
-    - task: SonarQubeAnalyze@5
+    - task: SonarQubeAnalyze@7
       displayName: SonarQube analyze
       condition: ne('${{ parameters.action }}', 'rollback')
 
-    - task: SonarQubePublish@5
+    - task: SonarQubePublish@7
       displayName: SonarQube publish
       condition: ne('${{ parameters.action }}', 'rollback')
       inputs:
