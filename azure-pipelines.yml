@@ -1,21 +1,20 @@
 # GitHub + Azure Pipelines + Sonar. No GoCD.
 #
-# Auto (push to rc / rc-* / rc/*):
-#   Build + tests + Sonar. Mails: started, Sonar started, pass/fail. NO Azure deploy.
+# AUTOMATIC:
+#   Push/merge to rc  → Build + Sonar + mail. No Azure.
+#   Push/merge to main → Build + Sonar + mail + Deploy stage
+#                        (Deploy waits on Environment approval if you set it).
 #
-# Prod deploy:
-#   Run pipeline → Action = deploy → Environment approve.
-#   Mails: started, Sonar, deploy started, deploy pass/fail.
+# MANUAL:
+#   Run pipeline → Action = deploy or rollback.
 #
-# Rollback:
-#   Run pipeline → Action = rollback → Branch to deploy.
-#   Skips Sonar. Mail start + deploy result.
-#
-# Set secret pipeline variables: GMAIL_USER, GMAIL_APP_PASSWORD, GMAIL_TO
+# Set secret variables: GMAIL_USER, GMAIL_APP_PASSWORD, GMAIL_TO
+# Environment test-webapp → Approvals = who may allow production.
 
 trigger:
   branches:
     include:
+      - main
       - rc
       - rc/*
       - rc-*
@@ -203,7 +202,8 @@ stages:
       succeeded(),
       or(
         eq('${{ parameters.action }}', 'deploy'),
-        eq('${{ parameters.action }}', 'rollback')
+        eq('${{ parameters.action }}', 'rollback'),
+        eq(variables['Build.SourceBranch'], 'refs/heads/main')
       )
     )
   jobs:
