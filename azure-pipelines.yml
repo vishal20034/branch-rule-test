@@ -194,7 +194,7 @@ stages:
       displayName: Upload artifact
       artifact: drop
 
-    - script: python3 send_mail.py "[CI/CD] Build and tests done — approve deploy" "Build and tests are done. If you have permission, open this Azure DevOps link and click Approve to deploy: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+    - script: python3 send_mail.py "[CI/CD] Build and tests done - approve deploy" "Build and tests are done. If you have permission, open this Azure DevOps link and click Approve to deploy. $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
       displayName: Email - approve deploy link
       condition: |
         and(
