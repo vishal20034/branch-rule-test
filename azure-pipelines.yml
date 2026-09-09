@@ -228,8 +228,8 @@ stages:
               azureSubscription: $(azureServiceConnectionId)
               appName: $(webAppName)
               package: $(Pipeline.Workspace)/drop/$(packageName)
-          - script: python3 send_mail.py "[CI/CD] Deploy SUCCEEDED" "test-webapp deploy succeeded action ${{ parameters.action }} run $(Build.BuildId)"
-            displayName: Email - Deploy succeeded
+          - script: python3 send_mail.py "[CI/CD] Implementation done" "CI/CD implementation done. test-webapp deploy succeeded. action ${{ parameters.action }} run $(Build.BuildId)"
+            displayName: Email - CI/CD implementation done
             env:
               GMAIL_USER: $(mailUser)
               GMAIL_APP_PASSWORD: $(mailPass)
