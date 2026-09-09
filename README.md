@@ -1,22 +1,30 @@
 # branch-rule-test
 
-Flask operator board used to prove GitHub → GoCD → SonarQube → Azure App Service.
+Python Flask app on Azure App Service.
+
+**CI/CD:** GitHub + Azure Pipelines + SonarQube. GoCD is not used.
+
+## GitHub rules
+- `feat-*` → `rc` / `rc-*` / `rc/*` (PR)
+- Only those **rc** branches may PR into **main**
+- Invalid PRs into `main` are closed automatically
+
+## Azure Pipelines (`azure-pipelines.yml`)
+- Push to **rc**: Build + Sonar (no deploy)
+- **Run pipeline** → Action **deploy**: deploy `test-webapp`
+- **Run pipeline** → Action **rollback** + **Branch to deploy**: redeploy that branch
 
 ## App
-- Board: checklist + release notes (saved in `data/store.json`)
-- Health JSON: `/health`
-- Export: `/export.json`
+- Board `/` · Pipeline `/pipeline` · Health `/health` · About `/about`
 
-## Run locally
 ```
 python -m pip install -r requirements.txt
 python -m pytest -q
 python -m flask --app app run
 ```
 
-## Azure
-Startup command: `gunicorn --bind=0.0.0.0:8000 app:app`
+Azure Startup Command:
 
-## Pipeline
-`pilot-ascode` on branch `main`: test → sonar → deploy.
-Gmail is sent from `send-mail.py` on the Agent (not GoCD Email server).
+```
+python -m pip install -r requirements.txt && gunicorn --bind=0.0.0.0:8000 app:app
+```

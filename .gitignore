@@ -6,3 +6,6 @@ package.zip
 *.pyc
 
 data/
+antenv/
+coverage.xml
+.scannerwork/
