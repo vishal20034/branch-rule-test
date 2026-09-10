@@ -17,6 +17,7 @@ def test_home_ok(tmp_path, monkeypatch):
     res = _client(tmp_path, monkeypatch).get("/")
     assert res.status_code == 200
     assert b"Operator board" in res.data
+    assert b"2026.09.10-pass" in res.data
 
 
 def test_add_search_delete_note(tmp_path, monkeypatch):
