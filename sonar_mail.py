@@ -742,8 +742,11 @@ def main():
         "Source: {source} (bitegarden trial PDF has evaluation watermark until license is paid).\n"
         "Quality gate: {gate}\n"
         "Bugs {bugs} | Vulnerabilities {vuln} | Hotspots {hs} | Smells {smells} | Coverage {cov}%\n"
+        "If the gate FAILED, CI/CD is failed because of SonarQube. Deploy did not start.\n"
+        "If the gate PASSED, CI/CD passed this stage.\n"
         "Sent only to GMAIL_TO."
     ).format(
+
         source=source,
         gate=data["gate"],
         bugs=(data["measures"].get("bugs") or "0"),
