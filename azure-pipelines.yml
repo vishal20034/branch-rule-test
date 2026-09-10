@@ -60,7 +60,8 @@ stages:
       fetchDepth: 0
       persistCredentials: true
 
-    - script: python3 send_mail.py "[CI/CD] Started" "CI/CD started. Repo $(Build.Repository.Name) branch $(Build.SourceBranchName) action ${{ parameters.action }} run $(Build.BuildId). Next: package, then SonarQube."
+    - script: |
+        python3 send_mail.py "[CI/CD] Started" "CI/CD started. Repo $(Build.Repository.Name) branch $(Build.SourceBranchName) action ${{ parameters.action }} run $(Build.BuildId). Next package then SonarQube."
 
       displayName: Email - CI/CD started
       env:
