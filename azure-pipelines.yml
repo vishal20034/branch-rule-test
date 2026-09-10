@@ -172,41 +172,7 @@ stages:
       condition: ne('${{ parameters.action }}', 'rollback')
 
     - powershell: |
-        $ErrorActionPreference = "Stop"
-        if (-not $env:SONAR_TOKEN) { throw "Set pipeline secret SONAR_TOKEN (squ_...)" }
-        $env:SONAR_HOST_URL = "http://127.0.0.1:9000"
-        $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
-        $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
-        $env:SONAR_SCANNER_OPTS = "-Xms64m -Xmx256m -XX:+UseSerialGC"
-        Write-Host "JAVA_HOME=$env:JAVA_HOME"
-        & "$env:JAVA_HOME\bin\java.exe" -version
-        $jar = $null
-        foreach ($p in @(
-          "D:\sonar-scanner\lib\sonar-scanner-cli-4.3.0.2102.jar",
-          "D:\Sonar-scanner\lib\sonar-scanner-cli-4.3.0.2102.jar",
-          "C:\sonar-scanner\lib\sonar-scanner-cli-4.3.0.2102.jar"
-        )) {
-          if (Test-Path $p) { $jar = $p; break }
-        }
-        if (-not $jar) {
-          $jar = Get-ChildItem "D:\sonar-scanner\lib","D:\Sonar-scanner\lib","C:\sonar-scanner\lib" -Filter "sonar-scanner-cli-*.jar" -ErrorAction SilentlyContinue |
-            Select-Object -First 1 -ExpandProperty FullName
-        }
-        if (-not $jar) { throw "No sonar-scanner-cli jar. Expected D:\sonar-scanner\lib\sonar-scanner-cli-*.jar" }
-
-        Write-Host "Using jar $jar"
-        $java = Join-Path $env:JAVA_HOME "bin\java.exe"
-        & $java -jar $jar `
-          "-Dsonar.host.url=$env:SONAR_HOST_URL" `
-          "-Dsonar.token=$env:SONAR_TOKEN" `
-          "-Dsonar.projectKey=branch-rule-test" `
-          "-Dsonar.python.version=3.11" `
-          "-Dsonar.sources=." `
-          "-Dsonar.tests=tests" `
-          "-Dsonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**" `
-          "-Dsonar.python.coverage.reportPaths=coverage.xml" `
-          "-Dsonar.qualitygate.wait=true"
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        powershell -NoProfile -ExecutionPolicy Bypass -File sonar-scan.ps1
       displayName: SonarQube analyze (localhost scanner)
       condition: ne('${{ parameters.action }}', 'rollback')
       env:
