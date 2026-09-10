@@ -164,22 +164,6 @@ stages:
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
 
-    - task: SonarQubePrepare@7
-      displayName: SonarQube prepare
-      condition: ne('${{ parameters.action }}', 'rollback')
-      inputs:
-        SonarQube: 'test-sonar'
-        scannerMode: 'cli'
-        configMode: 'manual'
-        cliProjectKey: 'branch-rule-test'
-        extraProperties: |
-          sonar.python.version=3.11
-          sonar.sources=.
-          sonar.tests=tests
-          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**
-          sonar.python.coverage.reportPaths=coverage.xml
-          sonar.qualitygate.wait=true
-
     - powershell: |
         python -m pip install -q pytest pytest-cov
         $env:PYTHONPATH = (Get-Location).Path
@@ -188,29 +172,34 @@ stages:
       condition: ne('${{ parameters.action }}', 'rollback')
 
     - powershell: |
-        $raw = $env:SONARQUBE_SCANNER_PARAMS
-        if (-not $raw) { $raw = '{}' }
-        $data = $raw | ConvertFrom-Json
-        $keep = @{}
-        $data.PSObject.Properties | ForEach-Object {
-          if ($_.Name -notlike 'sonar.branch.*' -and $_.Name -notlike 'sonar.pullrequest.*') {
-            $keep[$_.Name] = $_.Value
-          }
-        }
-        $json = ($keep | ConvertTo-Json -Compress)
-        Write-Host "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]$json"
-      displayName: Strip branch params (Sonar Community Edition)
+        $ErrorActionPreference = "Stop"
+        if (-not $env:SONAR_TOKEN) { throw "Set pipeline secret SONAR_TOKEN (Sonar User Token squ_...)" }
+        $env:SONAR_HOST_URL = "http://127.0.0.1:9000"
+        $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+        $env:SONAR_SCANNER_OPTS = "-Xms64m -Xmx256m -XX:+UseSerialGC"
+        $scanner = @(
+          "D:\sonar-scanner\bin\sonar-scanner.bat",
+          "D:\Sonar-scanner\bin\sonar-scanner.bat",
+          "C:\sonar-scanner\bin\sonar-scanner.bat"
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $scanner) { throw "sonar-scanner.bat not found on AVD" }
+        Write-Host "Using $scanner"
+        & $scanner `
+          "-Dsonar.host.url=$env:SONAR_HOST_URL" `
+          "-Dsonar.token=$env:SONAR_TOKEN" `
+          "-Dsonar.projectKey=branch-rule-test" `
+          "-Dsonar.python.version=3.11" `
+          "-Dsonar.sources=." `
+          "-Dsonar.tests=tests" `
+          "-Dsonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**" `
+          "-Dsonar.python.coverage.reportPaths=coverage.xml" `
+          "-Dsonar.qualitygate.wait=true" `
+          "-Dsonar.scm.disabled=false"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      displayName: SonarQube analyze (localhost scanner)
       condition: ne('${{ parameters.action }}', 'rollback')
-
-    - task: SonarQubeAnalyze@7
-      displayName: SonarQube analyze
-      condition: ne('${{ parameters.action }}', 'rollback')
-
-    - task: SonarQubePublish@7
-      displayName: SonarQube publish
-      condition: ne('${{ parameters.action }}', 'rollback')
-      inputs:
-        pollingTimeoutSec: '300'
+      env:
+        SONAR_TOKEN: $(SONAR_TOKEN)
 
     - powershell: |
         python -m pip install -q fpdf2 matplotlib pypdf
@@ -221,16 +210,20 @@ stages:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
+        SONAR_TOKEN: $(SONAR_TOKEN)
+        SONAR_HOST_URL: http://127.0.0.1:9000
+
 
     - powershell: |
         python -m pip install -q fpdf2 matplotlib pypdf
         python sonar_mail.py FAILED "[CI/CD] FAILED"
-      displayName: Email - CI/CD failed + Sonar PDF
-      condition: failed()
       env:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
+        SONAR_TOKEN: $(SONAR_TOKEN)
+        SONAR_HOST_URL: http://127.0.0.1:9000
+
 
 - stage: Deploy
   displayName: Deploy Web App
