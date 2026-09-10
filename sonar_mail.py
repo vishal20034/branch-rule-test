@@ -133,7 +133,8 @@ def download_bitegarden(host, tok, key, want_full):
             print("bitegarden miss:", last)
     if not found:
         print("bitegarden unavailable:", last)
-        return False
+        return 0
+
     if want_full:
         found.sort(key=lambda x: (x[0], x[1]), reverse=True)
     else:
@@ -147,7 +148,8 @@ def download_bitegarden(host, tok, key, want_full):
         "pages from",
         url,
     )
-    return True
+    return pages
+
 
 
 def letter(rating):
@@ -564,6 +566,143 @@ def write_pdf(data):
     return PDF_PATH
 
 
+def write_issue_appendix(data, out_path):
+    """Extra pages: every bug/smell/hotspot with file, line, message."""
+    from fpdf import FPDF
+
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=True, margin=16)
+    mm = data["measures"]
+    grouped = group_issues(data["issues"])
+    ranked = sorted(grouped.items(), key=lambda kv: -len(kv[1]))
+
+    pdf.add_page()
+    header(pdf, "Issue details")
+    pdf.set_xy(12, 24)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(*DARK)
+    pdf.cell(0, 8, "What is wrong in this analysis", ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*MUTED)
+    pdf.set_x(12)
+    pdf.multi_cell(
+        186,
+        5,
+        ascii(
+            "Bugs %s | Vulnerabilities %s | Hotspots %s | Code smells %s. "
+            "Each item below is file, line and the Sonar message."
+            % (
+                mm.get("bugs") or "0",
+                mm.get("vulnerabilities") or "0",
+                mm.get("security_hotspots") or "0",
+                mm.get("code_smells") or "0",
+            )
+        ),
+    )
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(*DARK)
+    pdf.set_x(12)
+    pdf.cell(22, 7, "Sev")
+    pdf.cell(28, 7, "Type")
+    pdf.cell(28, 7, "Count")
+    pdf.cell(108, 7, "Rule / message", ln=1)
+    pdf.set_font("Helvetica", "", 8)
+    if not ranked:
+        pdf.set_x(12)
+        pdf.cell(0, 6, "No open issues in the API (hotspots may still follow).", ln=1)
+    for rule, items in ranked:
+        sev = items[0].get("severity") or ""
+        typ = items[0].get("type") or ""
+        msg = items[0].get("message") or rule
+        pdf.set_x(12)
+        pdf.cell(22, 6, ascii(sev[:10]))
+        pdf.cell(28, 6, ascii(typ[:12]))
+        pdf.cell(28, 6, str(len(items)))
+        pdf.cell(108, 6, ascii(msg[:70]), ln=1)
+
+    for rule, items in ranked:
+        pdf.add_page()
+        header(pdf, ascii((items[0].get("type") or "Issue")[:18]))
+        pdf.set_xy(12, 24)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(*DARK)
+        pdf.multi_cell(186, 6, ascii(items[0].get("message") or rule))
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*MUTED)
+        pdf.set_x(12)
+        pdf.cell(
+            0,
+            6,
+            ascii(
+                "Rule %s | Severity %s | %s locations"
+                % (rule, items[0].get("severity"), len(items))
+            ),
+            ln=1,
+        )
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*DARK)
+        pdf.set_x(12)
+        pdf.cell(0, 7, "File / line / message", ln=1)
+        pdf.set_font("Helvetica", "", 8)
+        for issue in items[:40]:
+            loc = (issue.get("component") or "").split(":")[-1]
+            line = issue.get("line") or "-"
+            pdf.set_x(12)
+            pdf.multi_cell(
+                186,
+                5,
+                ascii("%s  L%s   %s" % (loc, line, issue.get("message") or "")),
+            )
+
+    hs_group = defaultdict(list)
+    for h in data["hotspots"]:
+        hs_group[h.get("message") or h.get("ruleKey") or "hotspot"].append(h)
+    for msg, items in hs_group.items():
+        pdf.add_page()
+        header(pdf, "Security Hotspot")
+        pdf.set_xy(12, 24)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(*DARK)
+        pdf.multi_cell(186, 6, ascii(msg))
+        h0 = items[0]
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(*MUTED)
+        pdf.set_x(12)
+        pdf.cell(
+            0,
+            6,
+            ascii("Status %s | Rule %s | %s places" % (h0.get("status"), h0.get("ruleKey"), len(items))),
+            ln=1,
+        )
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*DARK)
+        pdf.set_x(12)
+        pdf.cell(0, 7, "Where", ln=1)
+        pdf.set_font("Helvetica", "", 8)
+        for h in items[:40]:
+            loc = (h.get("component") or "").split(":")[-1]
+            line = (h.get("textRange") or {}).get("startLine") or h.get("line") or "-"
+            pdf.set_x(12)
+            pdf.multi_cell(186, 5, ascii("%s  L%s" % (loc, line)))
+
+    pdf.output(str(out_path))
+    return out_path
+
+
+def merge_pdfs(cover, appendix, dest):
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    for path in (cover, appendix):
+        reader = PdfReader(str(path))
+        for page in reader.pages:
+            writer.add_page(page)
+    with open(dest, "wb") as fh:
+        writer.write(fh)
+    print("merged PDF pages", len(writer.pages))
+
+
 def main():
     status_word = sys.argv[1] if len(sys.argv) > 1 else "REPORT"
     subject = sys.argv[2] if len(sys.argv) > 2 else "[CI/CD] SonarQube " + status_word
@@ -582,10 +721,19 @@ def main():
     want_full = issue_count > 0
     print("issue_count", issue_count, "want_full", want_full)
     source = "generated"
-    if host and tok and download_bitegarden(host, tok, data["project"], want_full):
-        source = "bitegarden-full" if want_full else "bitegarden-executive"
+    cover_pages = 0
+    if host and tok:
+        cover_pages = download_bitegarden(host, tok, data["project"], want_full)
+    if cover_pages:
+        source = "bitegarden-full" if cover_pages >= 4 else "bitegarden-executive"
+        if want_full and cover_pages <= 2:
+            appendix = ROOT / "issues-appendix.pdf"
+            write_issue_appendix(data, appendix)
+            merge_pdfs(PDF_PATH, appendix, PDF_PATH)
+            source = "bitegarden-executive + issue details"
     else:
         write_pdf(data)
+
     body = (
         "SonarQube report attached (SonarQube-Report.pdf).\n"
         "Source: {source} (bitegarden trial PDF has evaluation watermark until license is paid).\n"

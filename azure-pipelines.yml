@@ -213,7 +213,7 @@ stages:
         pollingTimeoutSec: '300'
 
     - powershell: |
-        python -m pip install -q fpdf2 matplotlib
+        python -m pip install -q fpdf2 matplotlib pypdf
         python sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
       displayName: Email - SonarQube passed + PDF
       condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
@@ -223,7 +223,7 @@ stages:
         GMAIL_TO: $(mailTo)
 
     - powershell: |
-        python -m pip install -q fpdf2 matplotlib
+        python -m pip install -q fpdf2 matplotlib pypdf
         python sonar_mail.py FAILED "[CI/CD] FAILED"
       displayName: Email - CI/CD failed + Sonar PDF
       condition: failed()
