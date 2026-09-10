@@ -35,18 +35,19 @@ Write-Host $ver
 
 $env:Path = "$env:JAVA_HOME\bin;" + (($env:Path -split ";" | Where-Object { $_ -notmatch "sonar-scanner" }) -join ";")
 
-& $java -jar $jar `
-    "-Dsonar.host.url=$env:SONAR_HOST_URL" `
-    "-Dsonar.token=$env:SONAR_TOKEN" `
-    "-Dsonar.projectKey=branch-rule-test" `
-    "-Dsonar.python.version=3.11" `
-    "-Dsonar.sources=." `
-    "-Dsonar.tests=tests" `
-    "-Dsonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**,**/sonar_mail.py,**/send_mail.py,**/*.ps1,**/azure-pipelines.yml" `
-    "-Dsonar.coverage.exclusions=templates/**,static/**,**/sonar_mail.py,**/send_mail.py" `
-    "-Dsonar.python.coverage.reportPaths=coverage.xml" `
-
-    "-Dsonar.qualitygate.wait=true" `
+$argsList = @(
+    "-jar", $jar,
+    "-Dsonar.host.url=$env:SONAR_HOST_URL",
+    "-Dsonar.token=$env:SONAR_TOKEN",
+    "-Dsonar.projectKey=branch-rule-test",
+    "-Dsonar.python.version=3.11",
+    "-Dsonar.sources=.",
+    "-Dsonar.tests=tests",
+    "-Dsonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**,**/sonar_mail.py,**/send_mail.py,**/*.ps1,**/azure-pipelines.yml",
+    "-Dsonar.coverage.exclusions=templates/**,static/**,**/sonar_mail.py,**/send_mail.py",
+    "-Dsonar.python.coverage.reportPaths=coverage.xml",
+    "-Dsonar.qualitygate.wait=true",
     "-Dsonar.sourceEncoding=UTF-8"
-
+)
+& $java @argsList
 exit $LASTEXITCODE
