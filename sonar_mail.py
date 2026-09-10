@@ -96,32 +96,58 @@ def download_bytes(url, tok, timeout=180):
         return resp.read()
 
 
-def download_bitegarden(host, tok, key):
-    """Pull the official bitegarden Full Issues PDF (trial may watermark)."""
+def pdf_page_count(raw):
+    return max(raw.count(b"/Type /Page"), raw.count(b"/Type/Page"))
+
+
+def download_bitegarden(host, tok, key, want_full):
+    """Executive (2 pages) when clean; full issues PDF when bugs/smells/hotspots exist."""
     q = urllib.parse.quote(key)
     urls = [
         host + "/api/bitegarden/report/pdf?resource=" + q + "&type=2",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=1",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=0",
         host + "/api/bitegarden/report/pdf?resource=" + q + "&type=FULL",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=ISSUES",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&reportType=2",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&report=full",
         host + "/api/bitegarden/report/pdf?resource=" + q,
         host + "/api/bitegarden/report/pdf?component=" + q + "&type=2",
         host + "/api/bitegarden/report/pdf?componentKey=" + q + "&type=2",
     ]
+    found = []
     last = ""
     for url in urls:
         try:
             print("bitegarden GET", url)
             raw = download_bytes(url, tok)
-            if raw[:4] == b"%PDF":
-                PDF_PATH.write_bytes(raw)
-                print("bitegarden PDF saved", len(raw), "bytes")
-                return True
-            last = "not PDF (%s bytes) %r" % (len(raw), raw[:60])
-            print(last)
+            if raw[:4] != b"%PDF":
+                last = "not PDF (%s bytes)" % len(raw)
+                print(last)
+                continue
+            pages = pdf_page_count(raw)
+            print("bitegarden PDF", pages, "pages", len(raw), "bytes")
+            found.append((pages, len(raw), raw, url))
         except Exception as exc:
             last = str(exc)
             print("bitegarden miss:", last)
-    print("bitegarden unavailable:", last)
-    return False
+    if not found:
+        print("bitegarden unavailable:", last)
+        return False
+    if want_full:
+        found.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    else:
+        found.sort(key=lambda x: (x[0], x[1]))
+    pages, nbytes, raw, url = found[0]
+    PDF_PATH.write_bytes(raw)
+    print(
+        "bitegarden chosen",
+        "FULL" if want_full else "EXECUTIVE",
+        pages,
+        "pages from",
+        url,
+    )
+    return True
 
 
 def letter(rating):
@@ -544,9 +570,20 @@ def main():
     data = collect(status_word)
     task = report_task()
     tok, host = token_and_host(task)
+    mm = data.get("measures") or {}
+
+    def n(metric):
+        try:
+            return int(float(mm.get(metric) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    issue_count = n("bugs") + n("vulnerabilities") + n("code_smells") + n("security_hotspots")
+    want_full = issue_count > 0
+    print("issue_count", issue_count, "want_full", want_full)
     source = "generated"
-    if host and tok and download_bitegarden(host, tok, data["project"]):
-        source = "bitegarden"
+    if host and tok and download_bitegarden(host, tok, data["project"], want_full):
+        source = "bitegarden-full" if want_full else "bitegarden-executive"
     else:
         write_pdf(data)
     body = (
