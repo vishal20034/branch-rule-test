@@ -1,17 +1,15 @@
-# GitHub + Azure Pipelines + Sonar. No GoCD.
+# GitHub + Azure Pipelines + Sonar on the AVD (localhost). No ngrok.
 #
 # AUTOMATIC:
-#   Push/merge to rc  → Build + Sonar + mail + Deploy (Environment approval).
+#   Push/merge to rc  → Build (Linux) + Sonar (AVD agent) + mail + Deploy.
 #   After prod deploy → Soak 6-7 hours. Do NOT merge to main yet.
 #   After soak        → mail "PR rc to main now".
-#   Push/merge to main → Build + Sonar only. No Azure (main is the proven record).
-#
-# MANUAL:
-#   Run pipeline → Action = deploy or rollback.
+#   Push/merge to main → Build + Sonar only. No Azure.
 #
 # Set secret variables: GMAIL_USER, GMAIL_APP_PASSWORD
-# GMAIL_TO = specific people, comma-separated, e.g. a@x.com,b@y.com
-# Environment test-webapp → Approvals = who may allow production.
+# GMAIL_TO = specific people, comma-separated
+# Service connection test-sonar Server Url MUST be http://127.0.0.1:9000
+# Agent pool Default = Azure Pipelines agent installed on the AVD.
 
 trigger:
   branches:
@@ -54,6 +52,7 @@ stages:
   displayName: Build
   jobs:
   - job: BuildJob
+    displayName: Package (Linux)
     pool:
       vmImage: $(vmImageName)
     steps:
@@ -97,44 +96,6 @@ stages:
       workingDirectory: $(projectRoot)
       displayName: Create antenv and install requirements
 
-    - script: python3 send_mail.py "[CI/CD] SonarQube started" "Sonar starting for $(Build.SourceBranchName) run $(Build.BuildId)"
-      displayName: Email - SonarQube started
-      condition: ne('${{ parameters.action }}', 'rollback')
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
-
-    - task: SonarQubePrepare@7
-      displayName: SonarQube prepare
-      condition: ne('${{ parameters.action }}', 'rollback')
-      inputs:
-        SonarQube: 'test-sonar'
-        scannerMode: 'cli'
-        configMode: 'manual'
-        cliProjectKey: 'branch-rule-test'
-        extraProperties: |
-          sonar.python.version=3.11
-          sonar.sources=.
-          sonar.tests=tests
-          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**
-          sonar.python.coverage.reportPaths=coverage.xml
-          sonar.qualitygate.wait=true
-
-    - script: |
-        python3 - << 'PY'
-        import json, os
-        raw = os.environ.get("SONARQUBE_SCANNER_PARAMS") or "{}"
-        data = json.loads(raw)
-        for key in list(data):
-            if key.startswith("sonar.branch.") or key.startswith("sonar.pullrequest."):
-                data.pop(key, None)
-        line = "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]" + json.dumps(data, separators=(",", ":"))
-        print(line)
-        PY
-      displayName: Strip branch params (Sonar Community Edition)
-      condition: ne('${{ parameters.action }}', 'rollback')
-
     - script: |
         set -e
         source antenv/bin/activate
@@ -144,36 +105,6 @@ stages:
       workingDirectory: $(projectRoot)
       displayName: Pytest with coverage
       condition: ne('${{ parameters.action }}', 'rollback')
-
-    - task: SonarQubeAnalyze@7
-      displayName: SonarQube analyze
-      condition: ne('${{ parameters.action }}', 'rollback')
-
-    - task: SonarQubePublish@7
-      displayName: SonarQube publish
-      condition: ne('${{ parameters.action }}', 'rollback')
-      inputs:
-        pollingTimeoutSec: '300'
-
-    - script: |
-        python3 -m pip install --quiet fpdf2 matplotlib
-        python3 sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
-      displayName: Email - SonarQube passed + PDF
-      condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
-
-    - script: |
-        python3 -m pip install --quiet fpdf2 matplotlib
-        python3 sonar_mail.py FAILED "[CI/CD] FAILED"
-      displayName: Email - CI/CD failed + Sonar PDF
-      condition: failed()
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
 
     - script: |
         set -e
@@ -211,6 +142,91 @@ stages:
             startsWith(variables['Build.SourceBranch'], 'refs/heads/rc')
           )
         )
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
+  - job: SonarJob
+    displayName: Sonar on AVD (localhost, no ngrok)
+    pool:
+      name: Default
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - powershell: |
+        python send_mail.py "[CI/CD] SonarQube started" "Sonar starting for $(Build.SourceBranchName) run $(Build.BuildId)"
+      displayName: Email - SonarQube started
+      condition: ne('${{ parameters.action }}', 'rollback')
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
+    - task: SonarQubePrepare@7
+      displayName: SonarQube prepare
+      condition: ne('${{ parameters.action }}', 'rollback')
+      inputs:
+        SonarQube: 'test-sonar'
+        scannerMode: 'cli'
+        configMode: 'manual'
+        cliProjectKey: 'branch-rule-test'
+        extraProperties: |
+          sonar.python.version=3.11
+          sonar.sources=.
+          sonar.tests=tests
+          sonar.exclusions=**/antenv/**,**/.git/**,**/__pycache__/**,**/.scannerwork/**
+          sonar.python.coverage.reportPaths=coverage.xml
+          sonar.qualitygate.wait=true
+
+    - powershell: |
+        python -m pip install -q pytest pytest-cov
+        $env:PYTHONPATH = (Get-Location).Path
+        python -m pytest -q tests --cov=app --cov-report=xml:coverage.xml --tb=short
+      displayName: Pytest coverage for Sonar
+      condition: ne('${{ parameters.action }}', 'rollback')
+
+    - powershell: |
+        $raw = $env:SONARQUBE_SCANNER_PARAMS
+        if (-not $raw) { $raw = '{}' }
+        $data = $raw | ConvertFrom-Json
+        $keep = @{}
+        $data.PSObject.Properties | ForEach-Object {
+          if ($_.Name -notlike 'sonar.branch.*' -and $_.Name -notlike 'sonar.pullrequest.*') {
+            $keep[$_.Name] = $_.Value
+          }
+        }
+        $json = ($keep | ConvertTo-Json -Compress)
+        Write-Host "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]$json"
+      displayName: Strip branch params (Sonar Community Edition)
+      condition: ne('${{ parameters.action }}', 'rollback')
+
+    - task: SonarQubeAnalyze@7
+      displayName: SonarQube analyze
+      condition: ne('${{ parameters.action }}', 'rollback')
+
+    - task: SonarQubePublish@7
+      displayName: SonarQube publish
+      condition: ne('${{ parameters.action }}', 'rollback')
+      inputs:
+        pollingTimeoutSec: '300'
+
+    - powershell: |
+        python -m pip install -q fpdf2 matplotlib
+        python sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
+      displayName: Email - SonarQube passed + PDF
+      condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
+    - powershell: |
+        python -m pip install -q fpdf2 matplotlib
+        python sonar_mail.py FAILED "[CI/CD] FAILED"
+      displayName: Email - CI/CD failed + Sonar PDF
+      condition: failed()
       env:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)
