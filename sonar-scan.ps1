@@ -31,9 +31,7 @@ Write-Host "java=$java"
 Write-Host "jar=$jar"
 $ver = cmd /c "`"$java`" -version 2>&1"
 Write-Host $ver
-if ($ver -notmatch 'version "17') {
-    throw "Must use Java 17. Got: $ver"
-}
+
 
 $env:Path = "$env:JAVA_HOME\bin;" + (($env:Path -split ";" | Where-Object { $_ -notmatch "sonar-scanner" }) -join ";")
 
