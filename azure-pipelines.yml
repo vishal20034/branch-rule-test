@@ -156,7 +156,7 @@ stages:
         pollingTimeoutSec: '300'
 
     - script: |
-        python3 -m pip install --quiet fpdf2
+        python3 -m pip install --quiet fpdf2 matplotlib
         python3 sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
       displayName: Email - SonarQube passed + PDF
       condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
@@ -166,7 +166,7 @@ stages:
         GMAIL_TO: $(mailTo)
 
     - script: |
-        python3 -m pip install --quiet fpdf2
+        python3 -m pip install --quiet fpdf2 matplotlib
         python3 sonar_mail.py FAILED "[CI/CD] FAILED"
       displayName: Email - CI/CD failed + Sonar PDF
       condition: failed()
