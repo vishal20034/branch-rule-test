@@ -10,7 +10,6 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-LOCAL_DASH = "http://127.0.0.1:9000/dashboard?id=branch-rule-test"
 
 
 def report_task():
@@ -68,19 +67,13 @@ def build_body(status_word):
     tok, host = token_and_host(task)
     key = task.get("projectKey") or "branch-rule-test"
     lines = [
-        "SonarQube report",
-        "Status: " + status_word,
+        "SONARQUBE REPORT (this email IS the report — no ngrok click needed)",
+        "Pipeline status: " + status_word,
         "Project: " + key,
-        "",
-        "Open the report on the AVD (this works, no ngrok warning):",
-        "  " + LOCAL_DASH,
-        "",
-        "If you are not on the AVD, use the ngrok link and click Visit Site once:",
-        "  " + (host + "/dashboard?id=" + key if host else "(no remote host)"),
         "",
     ]
     if not host or not tok:
-        lines.append("Could not load metrics (missing host or token). Use the AVD link above.")
+        lines.append("Could not load metrics (missing host or token).")
         return "\n".join(lines)
     try:
         qg = api_get(host + "/api/qualitygates/project_status?projectKey=" + key, tok)
@@ -103,11 +96,34 @@ def build_body(status_word):
             + "&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc,alert_status",
             tok,
         )
+        lines.append("Summary")
         for m in ((meas.get("component") or {}).get("measures") or []):
-            lines.append("{0}: {1}".format(m.get("metric"), m.get("value")))
+            lines.append("  {0}: {1}".format(m.get("metric"), m.get("value")))
+        lines.append("")
+        issues = api_get(
+            host
+            + "/api/issues/search?componentKeys="
+            + key
+            + "&resolved=false&ps=15&s=SEVERITY",
+            tok,
+        )
+        total = issues.get("total")
+        lines.append("Open issues: " + str(total))
+        for issue in issues.get("issues") or []:
+            lines.append(
+                "  [{severity}] {message} ({component}:{line})".format(
+                    severity=issue.get("severity"),
+                    message=issue.get("message"),
+                    component=(issue.get("component") or "").split(":")[-1],
+                    line=issue.get("line") or "-",
+                )
+            )
+        if not (issues.get("issues") or []):
+            lines.append("  none")
     except Exception as exc:
         lines.append("Live metrics could not be fetched: " + str(exc))
-        lines.append("Use the AVD dashboard link above.")
+    lines.append("")
+    lines.append("Recipients are GMAIL_TO (comma-separated) on the pipeline.")
     return "\n".join(lines)
 
 

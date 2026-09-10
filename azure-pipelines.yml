@@ -9,7 +9,8 @@
 # MANUAL:
 #   Run pipeline → Action = deploy or rollback.
 #
-# Set secret variables: GMAIL_USER, GMAIL_APP_PASSWORD, GMAIL_TO
+# Set secret variables: GMAIL_USER, GMAIL_APP_PASSWORD
+# GMAIL_TO = specific people, comma-separated, e.g. a@x.com,b@y.com
 # Environment test-webapp → Approvals = who may allow production.
 
 trigger:
