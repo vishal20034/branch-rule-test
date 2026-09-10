@@ -103,18 +103,21 @@ def pdf_page_count(raw):
 def download_bitegarden(host, tok, key, want_full):
     """Executive (2 pages) when clean; full issues PDF when bugs/smells/hotspots exist."""
     q = urllib.parse.quote(key)
-    urls = [
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=2",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=1",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=0",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=FULL",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=ISSUES",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&reportType=2",
-        host + "/api/bitegarden/report/pdf?resource=" + q + "&report=full",
-        host + "/api/bitegarden/report/pdf?resource=" + q,
-        host + "/api/bitegarden/report/pdf?component=" + q + "&type=2",
-        host + "/api/bitegarden/report/pdf?componentKey=" + q + "&type=2",
-    ]
+    types = "BUG,VULNERABILITY,CODE_SMELL,SECURITY_HOTSPOT"
+    if want_full:
+        urls = [
+            host + "/api/bitegarden/report/pdf_full_issues_breakdown?resource=" + q + "&types=" + types,
+            host + "/api/bitegarden/report/pdf_full_issues_breakdown?resource=" + q,
+            host + "/api/bitegarden/report/pdf_issues_breakdown?resource=" + q + "&types=" + types,
+            host + "/api/bitegarden/report/pdf?resource=" + q + "&type=2",
+            host + "/api/bitegarden/report/pdf?resource=" + q + "&type=1",
+        ]
+    else:
+        urls = [
+            host + "/api/bitegarden/report/pdf?resource=" + q,
+            host + "/api/bitegarden/report/pdf_executive?resource=" + q,
+        ]
+
     found = []
     last = ""
     for url in urls:
