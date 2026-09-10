@@ -155,16 +155,20 @@ stages:
       inputs:
         pollingTimeoutSec: '300'
 
-    - script: python3 sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
-      displayName: Email - SonarQube passed + report
+    - script: |
+        python3 -m pip install --quiet fpdf2
+        python3 sonar_mail.py PASSED "[CI/CD] SonarQube PASSED"
+      displayName: Email - SonarQube passed + PDF
       condition: and(succeeded(), ne('${{ parameters.action }}', 'rollback'))
       env:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)
         GMAIL_TO: $(mailTo)
 
-    - script: python3 sonar_mail.py FAILED "[CI/CD] FAILED"
-      displayName: Email - CI/CD failed + Sonar report
+    - script: |
+        python3 -m pip install --quiet fpdf2
+        python3 sonar_mail.py FAILED "[CI/CD] FAILED"
+      displayName: Email - CI/CD failed + Sonar PDF
       condition: failed()
       env:
         GMAIL_USER: $(mailUser)
