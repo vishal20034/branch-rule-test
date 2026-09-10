@@ -1,5 +1,6 @@
 # Run SonarScanner with JDK 17 + the CLI jar. Never use sonar-scanner.bat (that embeds Java 11).
-$ErrorActionPreference = "Stop"
+# java.exe writes -version to stderr; do not use ErrorAction Stop around that.
+$ErrorActionPreference = "Continue"
 
 if (-not $env:SONAR_TOKEN) {
     throw "SONAR_TOKEN is empty. Add it as a secret pipeline variable."
@@ -28,13 +29,12 @@ if (-not $jar) {
 Write-Host "JAVA_HOME=$env:JAVA_HOME"
 Write-Host "java=$java"
 Write-Host "jar=$jar"
-$ver = & $java -version 2>&1 | Out-String
+$ver = cmd /c "`"$java`" -version 2>&1"
 Write-Host $ver
 if ($ver -notmatch 'version "17') {
     throw "Must use Java 17. Got: $ver"
 }
 
-# Do not put scanner\bin on PATH — its bundled JRE is Java 11.
 $env:Path = "$env:JAVA_HOME\bin;" + (($env:Path -split ";" | Where-Object { $_ -notmatch "sonar-scanner" }) -join ";")
 
 & $java -jar $jar `
