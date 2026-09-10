@@ -81,6 +81,49 @@ def api_get(url, tok):
         return json.loads(raw)
 
 
+def download_bytes(url, tok, timeout=180):
+    auth = "Basic " + base64.b64encode((tok + ":").encode()).decode()
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": auth,
+            "ngrok-skip-browser-warning": "true",
+            "User-Agent": "Mozilla/5.0 (compatible; AzurePipeline/1.0)",
+            "Accept": "application/pdf,*/*",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def download_bitegarden(host, tok, key):
+    """Pull the official bitegarden Full Issues PDF (trial may watermark)."""
+    q = urllib.parse.quote(key)
+    urls = [
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=2",
+        host + "/api/bitegarden/report/pdf?resource=" + q + "&type=FULL",
+        host + "/api/bitegarden/report/pdf?resource=" + q,
+        host + "/api/bitegarden/report/pdf?component=" + q + "&type=2",
+        host + "/api/bitegarden/report/pdf?componentKey=" + q + "&type=2",
+    ]
+    last = ""
+    for url in urls:
+        try:
+            print("bitegarden GET", url)
+            raw = download_bytes(url, tok)
+            if raw[:4] == b"%PDF":
+                PDF_PATH.write_bytes(raw)
+                print("bitegarden PDF saved", len(raw), "bytes")
+                return True
+            last = "not PDF (%s bytes) %r" % (len(raw), raw[:60])
+            print(last)
+        except Exception as exc:
+            last = str(exc)
+            print("bitegarden miss:", last)
+    print("bitegarden unavailable:", last)
+    return False
+
+
 def letter(rating):
     try:
         n = int(float(rating))
@@ -499,13 +542,21 @@ def main():
     status_word = sys.argv[1] if len(sys.argv) > 1 else "REPORT"
     subject = sys.argv[2] if len(sys.argv) > 2 else "[CI/CD] SonarQube " + status_word
     data = collect(status_word)
-    write_pdf(data)
+    task = report_task()
+    tok, host = token_and_host(task)
+    source = "generated"
+    if host and tok and download_bitegarden(host, tok, data["project"]):
+        source = "bitegarden"
+    else:
+        write_pdf(data)
     body = (
-        "Full SonarQube executive PDF is attached (SonarQube-Report.pdf).\n"
+        "SonarQube report attached (SonarQube-Report.pdf).\n"
+        "Source: {source} (bitegarden trial PDF has evaluation watermark until license is paid).\n"
         "Quality gate: {gate}\n"
         "Bugs {bugs} | Vulnerabilities {vuln} | Hotspots {hs} | Smells {smells} | Coverage {cov}%\n"
         "Sent only to GMAIL_TO."
     ).format(
+        source=source,
         gate=data["gate"],
         bugs=(data["measures"].get("bugs") or "0"),
         vuln=(data["measures"].get("vulnerabilities") or "0"),
