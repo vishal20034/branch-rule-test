@@ -193,8 +193,11 @@ stages:
 
 
     - powershell: |
+        python send_mail.py "[CI/CD] FAILED" "SonarQube quality gate FAILED. Open http://127.0.0.1:9000/dashboard?id=branch-rule-test  Azure run $(Build.BuildId). Deploy did not start."
         python -m pip install -q fpdf2 matplotlib pypdf
         python sonar_mail.py FAILED "[CI/CD] FAILED"
+      displayName: Email - SonarQube failed + PDF
+      condition: failed()
       env:
         GMAIL_USER: $(mailUser)
         GMAIL_APP_PASSWORD: $(mailPass)

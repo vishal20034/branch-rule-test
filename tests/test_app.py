@@ -1,8 +1,8 @@
 import json
-import os
 from pathlib import Path
 
 import app as appmod
+
 
 
 def _client(tmp_path, monkeypatch):
