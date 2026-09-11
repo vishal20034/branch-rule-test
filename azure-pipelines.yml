@@ -54,7 +54,8 @@ variables:
 
 stages:
 - stage: Dev
-  displayName: Dev — zip and deploy (no Sonar, no Approve)
+  displayName: Dev — zip and deploy (no email, no Sonar, no Approve)
+
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/dev')
   jobs:
   - job: DevPackageDeploy
@@ -63,13 +64,6 @@ stages:
       vmImage: $(vmImageName)
     steps:
     - checkout: self
-    - script: |
-        python3 send_mail.py "[DEV] CI/CD Started" "DEV CI/CD started. Branch $(Build.SourceBranchName) run $(Build.BuildId). No Sonar. No Approve. Direct zip deploy to $(webAppNameDev)."
-      displayName: Email - DEV CI/CD started
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '$(pythonVersion)'
@@ -117,20 +111,10 @@ stages:
         appName: $(webAppNameDev)
         package: $(Build.ArtifactStagingDirectory)/$(packageName)
     - script: |
-        python3 send_mail.py "[DEV] CI/CD Succeeded" "DEV zip deploy completed to $(webAppNameDev). Test the Dev URL. You may merge feat to dev as many times as you want. run $(Build.BuildId)"
-      displayName: Email - DEV succeeded
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
-    - script: |
-        python3 send_mail.py "[DEV] CI/CD Failed" "DEV CI/CD failed. Fix feat, merge to dev again. Production was not touched. run $(Build.BuildId)"
-      displayName: Email - DEV failed
-      condition: failed()
-      env:
-        GMAIL_USER: $(mailUser)
-        GMAIL_APP_PASSWORD: $(mailPass)
-        GMAIL_TO: $(mailTo)
+        echo "DEV deploy finished. No email. Open and test:"
+        echo "https://$(webAppNameDev).azurewebsites.net"
+        echo "Merge feat to dev again as many times as you need."
+      displayName: Print Dev URL to test
 
 - stage: Build
   displayName: Build
