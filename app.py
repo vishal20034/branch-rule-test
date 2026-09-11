@@ -8,15 +8,17 @@ from uuid import uuid4
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFProtect
 
-APP_VERSION = "2026.09.10-pass"
+APP_VERSION = "2026.09.11-pass"
+
 
 SERVICE_NAME = "test-webapp"
 CHECK_KEYS = ("test", "sonar", "deploy")
 NOTE_LIMIT = 50
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 csrf = CSRFProtect(app)
+
 
 _lock = Lock()
 _store_path = Path(os.environ.get("STORE_PATH", "data/store.json"))
@@ -205,6 +207,24 @@ def health_ui():
         title="Health",
         payload=_health_payload(data),
     )
+
+
+@app.route("/api/notify", methods=["GET", "POST"])
+@csrf.exempt
+def api_notify():
+    """Azure DevOps service-hook target. Always 200, no redirect."""
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = {"form": request.form.to_dict(), "args": request.args.to_dict()}
+    return jsonify(
+        {
+            "ok": True,
+            "received": True,
+            "method": request.method,
+            "keys": list(payload)[:8] if isinstance(payload, dict) else [],
+        }
+    ), 200
+
 
 
 if __name__ == "__main__":

@@ -8,16 +8,19 @@ import app as appmod
 def _client(tmp_path, monkeypatch):
     store = tmp_path / "store.json"
     monkeypatch.setattr(appmod, "_store_path", store)
+    appmod.app.secret_key = "unit-test-secret"
     appmod.app.config["WTF_CSRF_ENABLED"] = False
     appmod.app.config["TESTING"] = True
     return appmod.app.test_client()
+
 
 
 def test_home_ok(tmp_path, monkeypatch):
     res = _client(tmp_path, monkeypatch).get("/")
     assert res.status_code == 200
     assert b"Operator board" in res.data
-    assert b"2026.09.10-pass" in res.data
+    assert b"2026.09.11-pass" in res.data
+
 
 
 def test_add_search_delete_note(tmp_path, monkeypatch):
@@ -76,6 +79,9 @@ def test_api_notify(tmp_path, monkeypatch):
     res = c.post("/api/notify", json={"event": "build.complete"})
     assert res.status_code == 200
     assert res.get_json()["ok"] is True
+    res = c.get("/api/notify")
+    assert res.status_code == 200
+    assert res.get_json()["method"] == "GET"
 
 
 def test_empty_note_rejected(tmp_path, monkeypatch):
