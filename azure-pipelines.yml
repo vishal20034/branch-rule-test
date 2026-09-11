@@ -1,7 +1,9 @@
 # GitHub + Azure Pipelines + Sonar on the AVD (localhost). No ngrok.
 #
 # AUTOMATIC:
+#   Push/merge to dev  → zip + deploy Azure Dev app. No Sonar. No Approve. Unlimited retries.
 #   Push/merge to rc  → Sonar on AVD first. Zip package ONLY if quality gate passes.
+
 
 #   After prod deploy → Soak 6-7 hours. Do NOT merge to main yet.
 #   After soak        → mail "PR rc to main now".
@@ -19,6 +21,7 @@ trigger:
       - rc
       - rc/*
       - rc-*
+      - dev
 
 pr: none
 
@@ -39,6 +42,7 @@ parameters:
 variables:
   azureServiceConnectionId: 'd3ebfeec-7df4-41b6-bbdd-03353e1c1272'
   webAppName: 'test-webapp'
+  webAppNameDev: 'test-webapp-dev'
   vmImageName: 'ubuntu-latest'
   environmentName: 'test-webapp'
   projectRoot: $(System.DefaultWorkingDirectory)
@@ -49,8 +53,88 @@ variables:
   mailTo: $(GMAIL_TO)
 
 stages:
+- stage: Dev
+  displayName: Dev — zip and deploy (no Sonar, no Approve)
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/dev')
+  jobs:
+  - job: DevPackageDeploy
+    displayName: Package and deploy Dev
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - checkout: self
+    - script: |
+        python3 send_mail.py "[DEV] CI/CD Started" "DEV CI/CD started. Branch $(Build.SourceBranchName) run $(Build.BuildId). No Sonar. No Approve. Direct zip deploy to $(webAppNameDev)."
+      displayName: Email - DEV CI/CD started
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: Use Python $(pythonVersion)
+    - script: |
+        set -e
+        python -m venv antenv
+        source antenv/bin/activate
+        python -m pip install --upgrade pip
+        pip install setuptools wheel
+        pip install -r requirements.txt
+      workingDirectory: $(projectRoot)
+      displayName: Create antenv and install requirements
+    - script: |
+        set -e
+        source antenv/bin/activate
+        python -m pip install pytest pytest-cov
+        export PYTHONPATH="$(pwd)"
+        pytest -q tests --cov=app --cov-report=xml:coverage.xml --tb=short
+      workingDirectory: $(projectRoot)
+      displayName: Pytest
+    - script: |
+        set -e
+        STAGING="$(Build.ArtifactStagingDirectory)/pkg"
+        rm -rf "$STAGING"
+        mkdir -p "$STAGING"
+        cp -a antenv app.py requirements.txt "$STAGING/"
+        cp -a templates static "$STAGING/"
+        [ -f startup.sh ] && cp -a startup.sh "$STAGING/"
+        [ -f .deployment ] && cp -a .deployment "$STAGING/"
+      workingDirectory: $(projectRoot)
+      displayName: Stage package
+    - task: ArchiveFiles@2
+      displayName: Zip package
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/pkg'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(packageName)
+        replaceExistingArchive: true
+    - task: AzureWebApp@1
+      displayName: Deploy Dev Web App (no approval)
+      inputs:
+        azureSubscription: $(azureServiceConnectionId)
+        appName: $(webAppNameDev)
+        package: $(Build.ArtifactStagingDirectory)/$(packageName)
+    - script: |
+        python3 send_mail.py "[DEV] CI/CD Succeeded" "DEV zip deploy completed to $(webAppNameDev). Test the Dev URL. You may merge feat to dev as many times as you want. run $(Build.BuildId)"
+      displayName: Email - DEV succeeded
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+    - script: |
+        python3 send_mail.py "[DEV] CI/CD Failed" "DEV CI/CD failed. Fix feat, merge to dev again. Production was not touched. run $(Build.BuildId)"
+      displayName: Email - DEV failed
+      condition: failed()
+      env:
+        GMAIL_USER: $(mailUser)
+        GMAIL_APP_PASSWORD: $(mailPass)
+        GMAIL_TO: $(mailTo)
+
 - stage: Build
   displayName: Build
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/dev')
   jobs:
   - job: SonarJob
     displayName: Sonar on AVD (before zip)
