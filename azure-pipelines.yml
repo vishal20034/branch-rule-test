@@ -1,72 +1,409 @@
-DEV — GITHUB ACTIONS → AZURE
 
-No SonarQube | No tag | No release note | No approver
+name: DEV - GitHub Actions -> Azure
 
-        ▼
+on:
+  push:
+    branches:
+      - dev
 
-1. Create feat/* branch from dev
-   Developer works in isolation
+  pull_request:
+    branches:
+      - dev
 
-        ▼
+permissions:
+  contents: read
 
-2. Open Pull Request
-   feat/* → dev
+env:
+  PYTHON_VERSION: "3.11"
 
-   CI runs:
-   - Lint
-   - Unit tests
+  # Azure
+  AZURE_WEBAPP_NAME: "test-webapp-dev"
+  AZURE_FUNCTIONAPP_NAME: "test-function-dev"
 
-   No deployment
+  # Package
+  WEBAPP_PACKAGE: "webapp.zip"
+  FUNCTION_PACKAGE: "function.zip"
 
-        ▼
 
-3. Merge Pull Request into dev
+# ============================================================
+# 1 & 2. FEATURE BRANCH -> PR -> DEV
+# ============================================================
+#
+# Developer creates:
+#
+#   feat/*
+#       |
+#       v
+#      PR
+#       |
+#       v
+#      dev
+#
+# PR runs ONLY lint + tests.
+# No deployment happens here.
+#
 
-   This merge triggers the Dev pipeline
+jobs:
 
-        ▼
+  # ==========================================================
+  # STEP 2 - PR CI
+  # ==========================================================
+  pr-ci:
+    name: PR CI - Lint and Tests
+    if: github.event_name == 'pull_request'
 
-4. Email 1 — "CI/CD started"
+    runs-on: ubuntu-latest
 
-   Team knows Dev deployment is in progress
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        ▼
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-5. Build / Test
+      - name: Create virtual environment
+        run: |
+          python -m venv antenv
+          source antenv/bin/activate
 
-   - Checkout merged dev commit
-   - Install dependencies
-   - Run tests
-   - Prepare application
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
 
-        ▼
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
-6. Build the package ONCE
+      # ------------------------------------------------------
+      # LINT
+      # ------------------------------------------------------
+      - name: Install lint tools
+        run: |
+          source antenv/bin/activate
+          pip install flake8
 
-   Create artifacts from the same commit:
+      - name: Run lint
+        run: |
+          source antenv/bin/activate
+          flake8 . --exclude=antenv,.git
 
-   - Function App artifact
-   - App Service artifact
+      # ------------------------------------------------------
+      # TESTS
+      # ------------------------------------------------------
+      - name: Install test tools
+        run: |
+          source antenv/bin/activate
+          pip install pytest pytest-cov
 
-        ▼
+      - name: Run tests
+        run: |
+          source antenv/bin/activate
+          export PYTHONPATH="$(pwd)"
 
-7. Deploy to Azure Dev
+          pytest -q tests \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --tb=short
 
-   Function App + App Service
 
-   GitHub Environment: dev
-   No required reviewers
+  # ==========================================================
+  # STEPS 3-8
+  #
+  # Merge PR into dev
+  #       ↓
+  # CI/CD started email
+  #       ↓
+  # Build/Test
+  #       ↓
+  # Build packages ONCE
+  #       ↓
+  # Deploy Function App + App Service
+  #       ↓
+  # Success / Failure email
+  # ==========================================================
+  dev-deployment:
+    name: DEV Deployment
 
-        ▼
+    # Runs ONLY after code is merged/pushed into dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
 
-8. Email result
+    runs-on: ubuntu-latest
 
-   SUCCESS:
-   "CI/CD succeeded"
+    environment:
+      name: dev
 
-   OR
+    steps:
 
-   FAILURE:
-   "CI/CD failed"
+      # ======================================================
+      # STEP 4 - EMAIL: CI/CD STARTED
+      # ======================================================
+      - name: Email - CI/CD started
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
 
-   Failure stops the pipeline
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          from email.message import EmailMessage
+
+          msg = EmailMessage()
+          msg["Subject"] = "[DEV] CI/CD started"
+          msg["From"] = os.environ["GMAIL_USER"]
+          msg["To"] = os.environ["GMAIL_TO"]
+
+          msg.set_content(
+              "CI/CD started for Development.\n\n"
+              "Branch: dev\n"
+              "Environment: dev\n"
+              "Deployment to Azure Dev has started."
+          )
+
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+              server.login(
+                  os.environ["GMAIL_USER"],
+                  os.environ["GMAIL_APP_PASSWORD"]
+              )
+              server.send_message(msg)
+          PY
+
+
+      # ======================================================
+      # STEP 5 - CHECKOUT MERGED DEV COMMIT
+      # ======================================================
+      - name: Checkout merged dev commit
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+
+      # ======================================================
+      # STEP 5 - BUILD / INSTALL / TEST
+      # ======================================================
+      - name: Create virtual environment
+        run: |
+          python -m venv antenv
+          source antenv/bin/activate
+
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+
+      - name: Run tests
+        run: |
+          source antenv/bin/activate
+
+          pip install pytest pytest-cov
+
+          export PYTHONPATH="$(pwd)"
+
+          pytest -q tests \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --tb=short
+
+
+      # ======================================================
+      # STEP 6 - BUILD PACKAGE ONCE
+      #
+      # Same commit
+      # Same pipeline
+      # Same build
+      #
+      # Creates:
+      #   webapp.zip
+      #   function.zip
+      # ======================================================
+
+      - name: Prepare Web App package
+        run: |
+          set -e
+
+          mkdir -p package/webapp
+
+          cp -a app.py package/webapp/
+          cp -a requirements.txt package/webapp/
+
+          if [ -d templates ]; then
+            cp -a templates package/webapp/
+          fi
+
+          if [ -d static ]; then
+            cp -a static package/webapp/
+          fi
+
+          if [ -f startup.sh ]; then
+            cp -a startup.sh package/webapp/
+          fi
+
+          if [ -f .deployment ]; then
+            cp -a .deployment package/webapp/
+          fi
+
+
+      - name: Create Web App ZIP
+        run: |
+          cd package/webapp
+          zip -r ../../${{ env.WEBAPP_PACKAGE }} .
+
+
+      - name: Prepare Function App package
+        run: |
+          set -e
+
+          mkdir -p package/function
+
+          # Copy Function App source
+          cp -a . package/function/ \
+            --exclude=.git \
+            --exclude=package \
+            --exclude=antenv \
+            --exclude=tests
+
+
+      - name: Create Function App ZIP
+        run: |
+          cd package/function
+          zip -r ../../${{ env.FUNCTION_PACKAGE }} .
+
+
+      # ======================================================
+      # UPLOAD ARTIFACTS
+      #
+      # These are created only once.
+      # Deployment uses these artifacts.
+      # ======================================================
+
+      - name: Upload Web App artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-webapp
+          path: ${{ env.WEBAPP_PACKAGE }}
+
+
+      - name: Upload Function App artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-function
+          path: ${{ env.FUNCTION_PACKAGE }}
+
+
+      # ======================================================
+      # STEP 7 - AZURE LOGIN
+      # ======================================================
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+
+      # ======================================================
+      # STEP 7 - DEPLOY AZURE DEV APP SERVICE
+      # ======================================================
+      - name: Deploy Azure Dev App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: ${{ env.WEBAPP_PACKAGE }}
+
+
+      # ======================================================
+      # STEP 7 - DEPLOY AZURE DEV FUNCTION APP
+      # ======================================================
+      - name: Deploy Azure Dev Function App
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ${{ env.FUNCTION_PACKAGE }}
+
+
+      # ======================================================
+      # STEP 8 - SUCCESS EMAIL
+      # ======================================================
+      - name: Email - CI/CD succeeded
+        if: success()
+
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
+
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          from email.message import EmailMessage
+
+          msg = EmailMessage()
+          msg["Subject"] = "[DEV] CI/CD succeeded"
+          msg["From"] = os.environ["GMAIL_USER"]
+          msg["To"] = os.environ["GMAIL_TO"]
+
+          msg.set_content(
+              "DEV CI/CD completed successfully.\n\n"
+              "Branch: dev\n"
+              "Environment: dev\n"
+              "Azure App Service: deployed\n"
+              "Azure Function App: deployed\n\n"
+              "The same commit was used to build and deploy both applications."
+          )
+
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+              server.login(
+                  os.environ["GMAIL_USER"],
+                  os.environ["GMAIL_APP_PASSWORD"]
+              )
+              server.send_message(msg)
+          PY
+
+
+      # ======================================================
+      # STEP 8 - FAILURE EMAIL
+      #
+      # If any previous step fails, this runs.
+      # Deployment stops because GitHub Actions stops on failure.
+      # ======================================================
+      - name: Email - CI/CD failed
+        if: failure()
+
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
+
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          from email.message import EmailMessage
+
+          msg = EmailMessage()
+          msg["Subject"] = "[DEV] CI/CD failed"
+          msg["From"] = os.environ["GMAIL_USER"]
+          msg["To"] = os.environ["GMAIL_TO"]
+
+          msg.set_content(
+              "DEV CI/CD FAILED.\n\n"
+              "Branch: dev\n"
+              "Environment: dev\n\n"
+              "The pipeline stopped because a step failed.\n"
+              "Please check the GitHub Actions run logs."
+          )
+
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+              server.login(
+                  os.environ["GMAIL_USER"],
+                  os.environ["GMAIL_APP_PASSWORD"]
+              )
+              server.send_message(msg)
+          PY
