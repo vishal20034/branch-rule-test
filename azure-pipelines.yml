@@ -14,15 +14,15 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.11"
-  WEBAPP_NAME: "test-webapp-dev"
-  FUNCTION_APP_NAME: "test-function-dev"
+
 
 jobs:
 
   # ==========================================================
   # STEP 2
-  # Open PR: feat/* -> dev
-  # CI only: lint + tests
+  # feat/* -> PR -> dev
+  # CI ONLY: Lint + Tests
+  # NO DEPLOYMENT
   # ==========================================================
 
   step-2-pr-ci:
@@ -57,38 +57,13 @@ jobs:
 
   # ==========================================================
   # STEP 4
-  # Email 1 - CI/CD started
+  # Email 1 - CI/CD Started
+  # Runs when code is merged/pushed into dev
   # ==========================================================
 
   step-4-email-started:
-    name: "4. Email 1 - CI/CD started"
+    name: "4. Email 1 - CI/CD Started"
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Send CI/CD started email
-        env:
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          GMAIL_TO: ${{ secrets.GMAIL_TO }}
-        run: |
-          python send_mail.py \
-            "[DEV] CI/CD started" \
-            "CI/CD started. Branch: dev. Development deployment is in progress."
-
-
-  # ==========================================================
-  # STEP 5
-  # Build / Test
-  # ==========================================================
-
-  step-5-build-test:
-    name: "5. Build and Test"
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: step-4-email-started
     runs-on: ubuntu-latest
 
     steps:
@@ -100,7 +75,39 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Create environment and install requirements
+      - name: Send CI/CD Started Email
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
+        run: |
+          python send_mail.py \
+            "[DEV] CI/CD Started" \
+            "CI/CD started. Branch: dev. Development deployment is in progress."
+
+
+  # ==========================================================
+  # STEP 5
+  # Build + Test
+  # ==========================================================
+
+  step-5-build-test:
+    name: "5. Build and Test"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs:
+      - step-4-email-started
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment and install requirements
         run: |
           python -m venv antenv
           source antenv/bin/activate
@@ -121,42 +128,35 @@ jobs:
 
   # ==========================================================
   # STEP 6
-  # Build package ONCE
-  # Function App artifact + App Service artifact
+  # Build Package ONCE
+  # Web App / App Service ONLY
   # ==========================================================
 
   step-6-package:
-    name: "6. Build Package ONCE"
+    name: "6. Build Package Once"
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: step-5-build-test
+    needs:
+      - step-5-build-test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create virtual environment
+      - name: Create package directory
         run: |
-          python -m venv antenv
-          source antenv/bin/activate
-          python -m pip install --upgrade pip
-          pip install setuptools wheel
-          pip install -r requirements.txt
+          rm -rf package
+          mkdir -p package/webapp
 
-      - name: Build packages once
+      - name: Prepare Web App package
         run: |
           set -e
 
-          rm -rf package
-          mkdir -p package/webapp
-          mkdir -p package/function
+          cp -a app.py package/webapp/
 
-          cp -a app.py requirements.txt package/webapp/
+          if [ -f requirements.txt ]; then
+            cp -a requirements.txt package/webapp/
+          fi
 
           if [ -d templates ]; then
             cp -a templates package/webapp/
@@ -174,74 +174,54 @@ jobs:
             cp -a .deployment package/webapp/
           fi
 
-          cp -a . package/function/ \
-            --exclude=.git \
-            --exclude=package \
-            --exclude=antenv \
-            --exclude=tests
-
+      - name: Create Web App artifact
+        run: |
           cd package/webapp
           zip -r ../../webapp.zip .
 
-          cd ../function
-          zip -r ../../function.zip .
-
-      - name: Upload App Service artifact
+      - name: Upload Web App artifact
         uses: actions/upload-artifact@v4
         with:
           name: dev-app-service
           path: webapp.zip
-
-      - name: Upload Function App artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dev-function-app
-          path: function.zip
+          retention-days: 30
 
 
   # ==========================================================
   # STEP 7
-  # Deploy to Azure Dev
-  # Function App + App Service
+  # Deploy to Azure DEV Web App
+  #
   # GitHub Environment: dev
+  # No manual approval
   # ==========================================================
 
   step-7-deploy:
-    name: "7. Deploy Azure Dev"
+    name: "7. Deploy Azure Dev Web App"
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: step-6-package
+    needs:
+      - step-6-package
     runs-on: ubuntu-latest
 
     environment:
       name: dev
 
     steps:
-      - name: Download App Service artifact
+      - name: Download Web App artifact
         uses: actions/download-artifact@v4
         with:
           name: dev-app-service
-
-      - name: Download Function App artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dev-function-app
+          path: package
 
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy Azure Dev App Service
+      - name: Deploy Azure Dev Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ env.WEBAPP_NAME }}
-          package: webapp.zip
-
-      - name: Deploy Azure Dev Function App
-        uses: Azure/functions-action@v1
-        with:
-          app-name: ${{ env.FUNCTION_APP_NAME }}
-          package: function.zip
+          app-name: ${{ vars.AZURE_WEBAPP_NAME_DEV }}
+          package: package/webapp.zip
 
 
   # ==========================================================
@@ -256,18 +236,25 @@ jobs:
       github.event_name == 'push' &&
       github.ref == 'refs/heads/dev' &&
       needs.step-7-deploy.result == 'success'
+
     needs:
       - step-4-email-started
       - step-5-build-test
       - step-6-package
       - step-7-deploy
+
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Send success email
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Send Success Email
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
@@ -275,7 +262,7 @@ jobs:
         run: |
           python send_mail.py \
             "[DEV] CI/CD Succeeded" \
-            "CI/CD succeeded. Branch: dev. Azure Dev Function App and Azure Dev App Service were deployed successfully."
+            "CI/CD succeeded. Branch: dev. Azure Dev Web App was deployed successfully."
 
 
   # ==========================================================
@@ -285,6 +272,7 @@ jobs:
 
   step-8-failed:
     name: "8. Email 2 - Failed"
+
     if: |
       always() &&
       github.event_name == 'push' &&
@@ -295,18 +283,25 @@ jobs:
         needs.step-6-package.result == 'failure' ||
         needs.step-7-deploy.result == 'failure'
       )
+
     needs:
       - step-4-email-started
       - step-5-build-test
       - step-6-package
       - step-7-deploy
+
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Send failure email
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Send Failure Email
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
