@@ -19,14 +19,23 @@ env:
 
 jobs:
 
-  pr-ci:
+  # ==========================================================
+  # STEP 2
+  # Open PR: feat/* -> dev
+  # CI only: lint + tests
+  # ==========================================================
+
+  step-2-pr-ci:
+    name: "2. PR CI - Lint and Tests"
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -38,7 +47,7 @@ jobs:
 
       - name: Lint
         run: |
-          flake8 . --exclude=.git,.venv,antenv
+          flake8 . --exclude=.git,antenv
 
       - name: Tests
         run: |
@@ -46,43 +55,43 @@ jobs:
           pytest -q tests --tb=short
 
 
-  dev-deploy:
+  # ==========================================================
+  # STEP 4
+  # Email 1 - CI/CD started
+  # ==========================================================
+
+  step-4-email-started:
+    name: "4. Email 1 - CI/CD started"
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    environment:
-      name: dev
 
     steps:
-      - name: Email 1 - CI/CD started
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send CI/CD started email
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
         run: |
-          python - <<'PY'
-          import os
-          import smtplib
-          from email.message import EmailMessage
+          python send_mail.py \
+            "[DEV] CI/CD started" \
+            "CI/CD started. Branch: dev. Development deployment is in progress."
 
-          msg = EmailMessage()
-          msg["Subject"] = "[DEV] CI/CD started"
-          msg["From"] = os.environ["GMAIL_USER"]
-          msg["To"] = os.environ["GMAIL_TO"]
-          msg.set_content(
-              "CI/CD started.\n\n"
-              "Branch: dev\n"
-              "Environment: dev\n"
-              "Deployment to Azure Dev is in progress."
-          )
 
-          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-              server.login(
-                  os.environ["GMAIL_USER"],
-                  os.environ["GMAIL_APP_PASSWORD"]
-              )
-              server.send_message(msg)
-          PY
+  # ==========================================================
+  # STEP 5
+  # Build / Test
+  # ==========================================================
 
+  step-5-build-test:
+    name: "5. Build and Test"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: step-4-email-started
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -91,7 +100,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Build and test
+      - name: Create environment and install requirements
         run: |
           python -m venv antenv
           source antenv/bin/activate
@@ -99,10 +108,47 @@ jobs:
           pip install setuptools wheel
           pip install -r requirements.txt
           pip install pytest pytest-cov
-          export PYTHONPATH="$(pwd)"
-          pytest -q tests --tb=short
 
-      - name: Build package once
+      - name: Run tests
+        run: |
+          source antenv/bin/activate
+          export PYTHONPATH="$(pwd)"
+          pytest -q tests \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --tb=short
+
+
+  # ==========================================================
+  # STEP 6
+  # Build package ONCE
+  # Function App artifact + App Service artifact
+  # ==========================================================
+
+  step-6-package:
+    name: "6. Build Package ONCE"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: step-5-build-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create virtual environment
+        run: |
+          python -m venv antenv
+          source antenv/bin/activate
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Build packages once
         run: |
           set -e
 
@@ -112,10 +158,21 @@ jobs:
 
           cp -a app.py requirements.txt package/webapp/
 
-          [ -d templates ] && cp -a templates package/webapp/
-          [ -d static ] && cp -a static package/webapp/
-          [ -f startup.sh ] && cp -a startup.sh package/webapp/
-          [ -f .deployment ] && cp -a .deployment package/webapp/
+          if [ -d templates ]; then
+            cp -a templates package/webapp/
+          fi
+
+          if [ -d static ]; then
+            cp -a static package/webapp/
+          fi
+
+          if [ -f startup.sh ]; then
+            cp -a startup.sh package/webapp/
+          fi
+
+          if [ -f .deployment ]; then
+            cp -a .deployment package/webapp/
+          fi
 
           cp -a . package/function/ \
             --exclude=.git \
@@ -128,6 +185,46 @@ jobs:
 
           cd ../function
           zip -r ../../function.zip .
+
+      - name: Upload App Service artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-app-service
+          path: webapp.zip
+
+      - name: Upload Function App artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-function-app
+          path: function.zip
+
+
+  # ==========================================================
+  # STEP 7
+  # Deploy to Azure Dev
+  # Function App + App Service
+  # GitHub Environment: dev
+  # ==========================================================
+
+  step-7-deploy:
+    name: "7. Deploy Azure Dev"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: step-6-package
+    runs-on: ubuntu-latest
+
+    environment:
+      name: dev
+
+    steps:
+      - name: Download App Service artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-app-service
+
+      - name: Download Function App artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-function-app
 
       - name: Azure Login
         uses: azure/login@v2
@@ -146,65 +243,75 @@ jobs:
           app-name: ${{ env.FUNCTION_APP_NAME }}
           package: function.zip
 
-      - name: Email 3 - Succeeded
-        if: success()
+
+  # ==========================================================
+  # STEP 8
+  # Email 3 - Succeeded
+  # ==========================================================
+
+  step-8-success:
+    name: "8. Email 3 - Succeeded"
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/dev' &&
+      needs.step-7-deploy.result == 'success'
+    needs:
+      - step-4-email-started
+      - step-5-build-test
+      - step-6-package
+      - step-7-deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send success email
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
         run: |
-          python - <<'PY'
-          import os
-          import smtplib
-          from email.message import EmailMessage
+          python send_mail.py \
+            "[DEV] CI/CD Succeeded" \
+            "CI/CD succeeded. Branch: dev. Azure Dev Function App and Azure Dev App Service were deployed successfully."
 
-          msg = EmailMessage()
-          msg["Subject"] = "[DEV] CI/CD Succeeded"
-          msg["From"] = os.environ["GMAIL_USER"]
-          msg["To"] = os.environ["GMAIL_TO"]
-          msg.set_content(
-              "CI/CD succeeded.\n\n"
-              "Branch: dev\n"
-              "Environment: dev\n"
-              "Azure Dev Function App: deployed\n"
-              "Azure Dev App Service: deployed."
-          )
 
-          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-              server.login(
-                  os.environ["GMAIL_USER"],
-                  os.environ["GMAIL_APP_PASSWORD"]
-              )
-              server.send_message(msg)
-          PY
+  # ==========================================================
+  # STEP 8
+  # Email 2 - Failed
+  # ==========================================================
 
-      - name: Email 2 - Failed
-        if: failure()
+  step-8-failed:
+    name: "8. Email 2 - Failed"
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/dev' &&
+      (
+        needs.step-4-email-started.result == 'failure' ||
+        needs.step-5-build-test.result == 'failure' ||
+        needs.step-6-package.result == 'failure' ||
+        needs.step-7-deploy.result == 'failure'
+      )
+    needs:
+      - step-4-email-started
+      - step-5-build-test
+      - step-6-package
+      - step-7-deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send failure email
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
         run: |
-          python - <<'PY'
-          import os
-          import smtplib
-          from email.message import EmailMessage
-
-          msg = EmailMessage()
-          msg["Subject"] = "[DEV] CI/CD Failed"
-          msg["From"] = os.environ["GMAIL_USER"]
-          msg["To"] = os.environ["GMAIL_TO"]
-          msg.set_content(
-              "CI/CD failed.\n\n"
-              "Branch: dev\n"
-              "Environment: dev\n"
-              "The pipeline has stopped. Check the GitHub Actions logs."
-          )
-
-          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-              server.login(
-                  os.environ["GMAIL_USER"],
-                  os.environ["GMAIL_APP_PASSWORD"]
-              )
-              server.send_message(msg)
-          PY
+          python send_mail.py \
+            "[DEV] CI/CD Failed" \
+            "CI/CD failed. Branch: dev. The Development pipeline has stopped. Check the GitHub Actions run for the failed step."
